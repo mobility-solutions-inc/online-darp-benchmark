@@ -119,9 +119,11 @@ source exposes pickup/drop-off taxi zones and times. Ontra sampled synthetic
 points inside those zones, remapped them to a frozen routable point pool, created
 synthetic fleets, and routed the complete point matrix with GraphHopper.
 
-The normalized collection is released under CC BY 4.0. Attribution must identify
-the NYC TLC source and Mobility Solutions Inc modifications. No City endorsement
-is implied.
+The TLC-derived demand and fleet components are released under CC BY 4.0.
+OpenStreetMap-derived travel data retain Open Database License 1.0 attribution
+and reuse requirements. Attribution must identify NYC TLC, OpenStreetMap
+contributors, Geofabrik, GraphHopper, and Mobility Solutions Inc modifications.
+No City endorsement is implied.
 """
 
 
@@ -847,7 +849,7 @@ def convert(
             ],
         },
         "license": {
-            "spdx_or_name": "CC-BY-4.0",
+            "spdx_or_name": "CC-BY-4.0 AND ODbL-1.0",
             "notice_paths": ["LICENSES/upstream-notices.md"],
             "redistribution": "confirmed",
         },

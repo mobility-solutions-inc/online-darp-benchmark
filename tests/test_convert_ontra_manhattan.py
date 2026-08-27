@@ -152,6 +152,7 @@ def test_convert_ontra_manhattan_round_trip(tmp_path: Path) -> None:
     assert collection["scope"]["official_fleet_deployments"] == 1
     assert collection["scope"]["supplemental_fleet_deployments"] == 1
     assert collection["transformations"][0]["code_version"] == "test-version"
+    assert collection["license"]["spdx_or_name"] == "CC-BY-4.0 AND ODbL-1.0"
 
     nodes = pq.read_table(
         output / "tables/networks/pool25-graphhopper-car-x1p4/nodes.parquet"

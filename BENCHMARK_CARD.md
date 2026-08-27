@@ -105,10 +105,31 @@ approach. It must disclose enough to reproduce its behavior, including:
 - tuning and penalty parameters;
 - planning and commitment policies;
 - use of forecast demand and relocation; and
-- benchmark or external data used in training or tuning.
+- benchmark or external data used in training or tuning; and
+- every external optimization component, including exact version, role, access
+  terms, paid-license use, obtainability, threads, and parameters.
 
 The evaluator checks information access and realized outcomes, not whether the
 algorithm optimizes a preferred formulation.
+
+## Solver and optimization-stack disclosure
+
+Solver access is part of the scorecard's reproducibility context. Every result
+must explicitly disclose whether it invokes an external solver, modeling layer,
+routing engine, or other optimization component. Each component records its exact
+name and version, role, license/terms and URL, access class, whether a paid license
+was used, whether the exact environment is publicly obtainable, thread count, and
+result-affecting parameters.
+
+Commercial and restricted-access solvers are permitted. The benchmark reports
+their use without penalizing them or hiding it in an aggregate score. Algorithms
+whose optimization logic is entirely contained in their submitted artifact report
+an empty external stack rather than omitting the field.
+
+The public matrix includes visible optimization-stack, access, paid-license-used,
+obtainability, and thread columns. Multiple components remain individually
+visible. Product access classifications are submission-specific because licenses
+and editions can change; the cited terms used for the run are authoritative.
 
 ## Prediction-data tracks
 
@@ -163,7 +184,8 @@ following groups individually.
 ### Computation
 
 - mean, 95th-percentile, and maximum decision latency;
-- run wall time, peak memory, decision epochs, and timeouts.
+- run wall time, peak memory, decision epochs, and timeouts; and
+- external solver calls, solver wall time, and solver time-limit hits.
 
 ### Feasibility
 

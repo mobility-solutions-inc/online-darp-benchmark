@@ -79,8 +79,10 @@ results/<benchmark-version>/<algorithm>/<submission-id>/events.jsonl
 Include a schema-valid result manifest, complete event log, algorithm source or
 immutable artifact, reproducible invocation, license, and a disclosure of the
 internal objective, prediction/training data, relocation policy, tuning, and
-hardware. Submit every required instance/lookahead/seed combination or explicitly
-list missing combinations with a run status and reason.
+hardware. Disclose every external solver or optimization component, including its
+exact version, role, access terms, paid-license use, obtainability, threads, and
+parameters. Submit every required instance/lookahead/seed combination or
+explicitly list missing combinations with a run status and reason.
 
 Do not report a large-instance solution as optimal without a certificate. Do not
 replace `null` with zero, omit failed runs, cherry-pick seeds, or calculate an
@@ -113,4 +115,3 @@ Code and documentation contributions are made under the repository's MIT license
 unless a file clearly states another compatible license. Data retains its stated
 license. By contributing, you confirm that you have the right to provide the
 material under those terms.
-

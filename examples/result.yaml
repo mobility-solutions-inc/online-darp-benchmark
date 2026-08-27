@@ -1,4 +1,4 @@
-schema_version: 0.1.0
+schema_version: 0.2.0
 result_id: synthetic-greedy.smoke.h0.seed7
 benchmark_version: 0.1.0
 instance_id: synthetic.smoke.001
@@ -10,6 +10,10 @@ algorithm:
   artifact_url: https://github.com/mobility-solutions-inc/online-darp-benchmark
   artifact_digest: example-only
   internal_objective: Accept a revealed request if the single vehicle has capacity.
+  optimization_stack:
+    uses_external_components: false
+    components: []
+    notes: Optimization logic is included in the algorithm artifact.
   hard_and_soft_constraints: Capacity and pickup windows are hard.
   prediction_data_track: none
   uses_prediction: false
@@ -75,6 +79,9 @@ metrics:
     peak_memory_mb: 12
     decision_epochs: 2
     timeouts: 0
+    external_solver_calls: 0
+    external_solver_wall_time_seconds: 0
+    external_solver_time_limit_hits: 0
   feasibility:
     capacity_violations: 0
     pickup_window_violations: 0

@@ -68,7 +68,36 @@ def validate_manifest(
     if errors:
         details = "\n".join(_format_error(error) for error in errors)
         raise ValidationFailure(f"{path} failed {kind} validation:\n{details}")
+    if kind == "result":
+        validate_result_semantics(path, document)
     return document
+
+
+def validate_result_semantics(path: Path, document: dict[str, Any]) -> None:
+    """Check result invariants that JSON Schema cannot express conveniently."""
+
+    stack = document["algorithm"]["optimization_stack"]
+    component_ids = [component["component_id"] for component in stack["components"]]
+    failures: list[str] = []
+    if len(component_ids) != len(set(component_ids)):
+        failures.append("optimization_stack component_id values must be unique")
+
+    if (
+        not stack["uses_external_components"]
+        and document["run"]["run_status"] == "completed"
+    ):
+        computation = document["metrics"]["computation"]
+        for field in (
+            "external_solver_calls",
+            "external_solver_wall_time_seconds",
+            "external_solver_time_limit_hits",
+        ):
+            if computation[field] != 0:
+                failures.append(f"{field} must be zero when no external component is used")
+
+    if failures:
+        details = "\n".join(failures)
+        raise ValidationFailure(f"{path} failed result validation:\n{details}")
 
 
 def validate_event_log(
@@ -156,4 +185,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

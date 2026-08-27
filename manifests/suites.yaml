@@ -8,10 +8,20 @@ source_membership:
     inclusion_rule: all_applicable_instances
     task_partition:
       darp: main_scorecard
-      dpdptw: adjacent_scorecard
   - source_id: nyc-darp
     release: v1.0
     inclusion_rule: all_request_instances_and_vehicle_deployments
+    task_partition:
+      darp: main_scorecard
+  - source_id: ontra-manhattan-tlc
+    release: v1.0.0
+    inclusion_rule: full_hour_with_balanced_fleets
+    official_fleet_deployments:
+      - balanced-manhattan-1000
+      - balanced-manhattan-2000
+      - balanced-manhattan-4000
+    supplemental_fleet_deployments:
+      - historical-rust-regression-2000
     task_partition:
       darp: main_scorecard
 lookahead:
@@ -44,4 +54,3 @@ reference_policy:
 hidden_evaluation:
   enabled: false
   status: future_sponsored_phase
-

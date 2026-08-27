@@ -36,11 +36,12 @@ Unsupported is distinct from infeasible.
 
 ## Public sources
 
-The intended v1 suite is exhaustive over the applicable DARP instances in
-[Eccel DDARP/DPDPTW v1.2](https://doi.org/10.5281/zenodo.4107192) and
-[NYC-DARP v1.0](https://doi.org/10.5281/zenodo.20452171). Redistribution is
-confirmed and draft Parquet collections are distributed as immutable archives,
-not committed to Git or Git LFS.
+The intended v1 suite is exhaustive over the applicable passenger DARP instances
+in [Eccel DDARP v1.2](https://doi.org/10.5281/zenodo.4107192),
+[NYC-DARP v1.0](https://doi.org/10.5281/zenodo.20452171), and the new
+[Ontra Manhattan TLC 2025-01-22 collection](https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/tag/ontra-manhattan-tlc-2025-01-22-v1.0.0-draft.1).
+Redistribution is confirmed and draft Parquet collections are distributed as
+immutable archives, not committed to Git or Git LFS.
 [Read the source and attribution status](sources.html).
 
 ## Participate

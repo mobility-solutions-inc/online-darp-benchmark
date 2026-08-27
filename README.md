@@ -70,6 +70,7 @@ schemas/       Versioned instance, result, and event-log contracts
 templates/     Commented templates for new submissions
 examples/      Small schema-valid examples
 manifests/     Public source and benchmark-suite registries
+proposals/     Draft benchmark-semantic RFCs under public review
 src/           Validation command-line tool
 tests/         Contract tests
 docs/          GitHub Pages site
@@ -94,6 +95,9 @@ Start with [CONTRIBUTING.md](CONTRIBUTING.md) and use the matching pull-request
 template. Changes to benchmark semantics follow the process in
 [GOVERNANCE.md](GOVERNANCE.md).
 
+Active design proposal: [RFC-0001, Parquet Instance Package
+Format](proposals/0001-parquet-instance-format.md).
+
 ## License and citation
 
 Benchmark-owned code and documentation are MIT licensed. Source datasets retain
@@ -102,4 +106,3 @@ relicense them. Cite this benchmark using [CITATION.cff](CITATION.cff), and cite
 each source dataset used in an experiment.
 
 Project site: <https://mobility-solutions-inc.github.io/online-darp-benchmark/>
-

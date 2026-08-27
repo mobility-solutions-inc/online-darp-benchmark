@@ -46,5 +46,5 @@ currently redistributed while licensing, provenance, and checksums are audited.
 - [Read the full benchmark contract on GitHub](https://github.com/mobility-solutions-inc/online-darp-benchmark/blob/main/BENCHMARK_CARD.md)
 - [Submit a public instance or benchmark result](submit.html)
 - [Browse the schemas](https://github.com/mobility-solutions-inc/online-darp-benchmark/tree/main/schemas)
+- [Review RFC-0001: Parquet instance packages](https://github.com/mobility-solutions-inc/online-darp-benchmark/blob/proposal/parquet-instance-format/proposals/0001-parquet-instance-format.md)
 - [Follow the roadmap](https://github.com/mobility-solutions-inc/online-darp-benchmark/blob/main/ROADMAP.md)
-

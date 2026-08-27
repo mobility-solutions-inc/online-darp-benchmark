@@ -1,5 +1,9 @@
 ## New public instance collection
 
+> This template is public-only. Do not include hidden instance data, private
+> links, confidential metadata, or hidden checksums. Use the hidden-instance
+> intake issue form for confidential collections.
+
 Source/release:
 
 Proposal issue:
@@ -25,4 +29,3 @@ Commands and output:
 
 Disclose authorship, funding, employment, or other interests connected to this
 dataset.
-

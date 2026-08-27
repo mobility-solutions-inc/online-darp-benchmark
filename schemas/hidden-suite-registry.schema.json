@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mobility-solutions-inc.github.io/online-darp-benchmark/schemas/hidden-suite-registry.schema.json",
+  "title": "Public opaque hidden-suite registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "policy_version", "entries"],
+  "properties": {
+    "schema_version": {"const": "0.1.0"},
+    "policy_version": {"type": "string", "minLength": 1},
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "suite_id",
+          "suite_version",
+          "status",
+          "disclosure_level",
+          "approved_summary",
+          "approved_attribution"
+        ],
+        "properties": {
+          "suite_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,191}$"},
+          "suite_version": {"type": "string", "minLength": 1},
+          "status": {"enum": ["under_review", "accepted_evaluation_inactive", "evaluation_ready", "retired", "withdrawn"]},
+          "disclosure_level": {"enum": ["opaque_only", "approved_summary"]},
+          "approved_summary": {"type": ["string", "null"]},
+          "approved_attribution": {"type": ["string", "null"]}
+        },
+        "allOf": [
+          {
+            "if": {
+              "required": ["disclosure_level"],
+              "properties": {"disclosure_level": {"const": "approved_summary"}}
+            },
+            "then": {
+              "properties": {"approved_summary": {"type": "string", "minLength": 1}}
+            }
+          }
+        ]
+      }
+    }
+  }
+}

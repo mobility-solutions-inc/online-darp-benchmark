@@ -43,5 +43,6 @@ reference_policy:
   large: best_known_offline_with_budget_and_optional_bound
 hidden_evaluation:
   enabled: false
-  status: future_sponsored_phase
-
+  intake_status: proposed
+  result_production_status: future_sponsored_phase
+  policy: proposals/0003-hidden-instance-submission-and-result-eligibility.md

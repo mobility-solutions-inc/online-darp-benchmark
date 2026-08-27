@@ -1,6 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Confidential hidden-instance contact
+    url: https://www.ontramobility.com/
+    about: Use this when even the submitter identity cannot appear in a public intake issue.
   - name: Private security report
     url: https://github.com/mobility-solutions-inc/online-darp-benchmark/security/advisories/new
     about: Report vulnerabilities, private leakage, or sensitive-data problems.
-

@@ -1,12 +1,31 @@
-schema_version: 0.1.0
+schema_version: 0.3.0
 result_id: synthetic-greedy.smoke.h0.seed7
 benchmark_version: 0.1.0
 instance_id: synthetic.smoke.001
 instance_sha256: 647e74f49e12ed75efa154e967e22a4b46b6ca732191b27c3257a120be4e4ca8
 supersedes_result_id: null
+standing:
+  instance_visibility: public
+  classification: unofficial
+  official: false
+  access:
+    instance_contributor_involved: false
+    algorithm_team_had_pre_evaluation_access: false
+    controlled_evaluation: false
+    evaluation_operator: null
+    access_attestation_uri: null
+  conflicts: []
+  eligibility_notes: Synthetic schema fixture; not an official benchmark run.
 algorithm:
   name: Synthetic Greedy
   version: 0.1.0
+  team:
+    - name: Synthetic Example Author
+      github: null
+      roles:
+        - author
+  code_available_publicly: true
+  public_code_url: https://github.com/mobility-solutions-inc/online-darp-benchmark/tree/4fdd704f408773670597a9611dd978578caf245b
   artifact_url: https://github.com/mobility-solutions-inc/online-darp-benchmark
   artifact_digest: example-only
   internal_objective: Accept a revealed request if the single vehicle has capacity.

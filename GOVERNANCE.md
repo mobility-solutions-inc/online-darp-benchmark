@@ -2,8 +2,8 @@
 
 ## Scope
 
-This policy governs benchmark definitions, public instances, official results,
-reference solutions, validation software, documentation, and future hidden-test
+This policy governs benchmark definitions, public and hidden instances, official
+and reference results, validation software, documentation, and hidden-test
 infrastructure in the Online DARP Benchmark project.
 
 ## Roles
@@ -60,6 +60,25 @@ interests connected to a submitted algorithm, dataset, or result. A conflicted
 maintainer may clarify process but does not cast the deciding review. The decision
 record names recusals.
 
+For hidden evaluation, anyone who created, selected, transformed, supplied, or
+validated the instances with confidential access is an instance contributor.
+Anyone who authored, controlled, tuned, selected, or materially modified an
+algorithm or submitted configuration is part of its algorithm team. Official
+hidden results require that no algorithm-team member had pre-evaluation access
+and that no instance contributor participated in development, tuning,
+configuration selection, or result selection for that algorithm.
+
+Every hidden collection has a confidential append-only access ledger. Prior
+access remains an eligibility fact after access is revoked, data is deleted, or a
+person recuses. Public standing conflicts are recorded in
+[manifests/hidden-conflicts.yaml](manifests/hidden-conflicts.yaml).
+
+Connor Riley administers the hidden suite and therefore will not submit or claim
+official hidden-instance results for code he authors or controls. Such results
+may be published only as `contributor_reference` or `unofficial`, even if another
+person operates the evaluation. This standing restriction is access-based and
+does not expire through recusal or deletion.
+
 ## Releases
 
 Maintainers publish signed or GitHub-verifiable tags, a changelog, suite manifest,
@@ -69,13 +88,22 @@ compatibility rules in [BENCHMARK_CARD.md](BENCHMARK_CARD.md).
 Security, privacy, or licensing problems may require withdrawing an artifact. The
 project records what was removed, why, and whether prior results remain comparable.
 
-## Future hidden evaluations
+## Hidden-instance intake and evaluation
 
-Hidden tests are out of scope for the public-only initial release. Before launch,
-the project must publish policies for funding independence, evaluator access,
-submission quotas, compute budgets, retention, incident response, test rotation,
-and leakage. Sponsors may fund infrastructure but may not receive privileged test
-access or favorable scoring treatment.
+The project may accept confidential hidden collections before sponsored
+evaluation compute exists. Intake uses a metadata-minimal public request or
+private contact, one isolated private staging repository per submission, a
+confidential manifest, and an append-only access ledger. Hidden bytes and
+scientific details never enter public issues or pull requests.
+
+An instance contributor may provide a validated reference result, but it is
+permanently `contributor_reference` and cannot establish an official record or
+rank. Official hidden evaluation is not activated until the project publishes
+and funds independent evaluator access, submission quotas, compute budgets,
+retention, incident response, and leakage controls. Sponsors may fund
+infrastructure but may not receive privileged test access or favorable scoring
+treatment. The detailed proposal is
+[RFC-0003](proposals/0003-hidden-instance-submission-and-result-eligibility.md).
 
 ## Maintainer changes
 
@@ -89,4 +117,3 @@ or loss of trust after notice and a documented vote by the other maintainers.
 A contributor may appeal a benchmark decision by opening a governance issue with
 new technical or process evidence. Amendments to this policy follow the same
 14-day proposal process as other benchmark-changing decisions.
-

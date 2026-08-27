@@ -1,5 +1,8 @@
 import json
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pyarrow.parquet as pq
 import pytest
@@ -16,6 +19,49 @@ from online_darp_benchmark.parquet_collection import validate_collection
 
 def _write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value), encoding="utf-8")
+
+
+class _GraphHopperHandler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+    route_count = 0
+
+    def do_GET(self) -> None:  # noqa: N802 - standard-library handler API
+        path = urlsplit(self.path).path
+        if path == "/info":
+            self._write_json(
+                {
+                    "version": "test",
+                    "profiles": [{"name": "car"}],
+                    "import_date": "2026-08-02T00:00:00Z",
+                    "data_date": "2026-08-01T20:00:00Z",
+                }
+            )
+            return
+        if path == "/route":
+            type(self).route_count += 1
+            self._write_json(
+                {
+                    "paths": [
+                        {
+                            "time": 2800,
+                            "distance": 12.345,
+                        }
+                    ]
+                }
+            )
+            return
+        self.send_error(404)
+
+    def _write_json(self, value: object) -> None:
+        body = json.dumps(value).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format: str, *args: object) -> None:
+        pass
 
 
 def _source_fixture(root: Path) -> None:
@@ -68,14 +114,28 @@ def test_convert_ontra_manhattan_round_trip(tmp_path: Path) -> None:
     source.mkdir()
     _source_fixture(source)
 
-    summary = convert(
-        source,
-        output,
-        "test-version",
-        enforce_pins=False,
-        balanced_fleet_sizes=(4,),
-        matrix_shard_origins=2,
-    )
+    _GraphHopperHandler.route_count = 0
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _GraphHopperHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        summary = convert(
+            source,
+            output,
+            "test-version",
+            graphhopper_url=f"http://127.0.0.1:{server.server_port}",
+            osm_pbf_sha256="0" * 64,
+            graphhopper_build="test-build",
+            graphhopper_config_sha256="1" * 64,
+            enforce_pins=False,
+            balanced_fleet_sizes=(4,),
+            matrix_shard_origins=2,
+            graphhopper_concurrency=4,
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
 
     assert summary == {
         "collection_id": "ontra-manhattan-tlc-2025-01-22-v1",
@@ -94,14 +154,19 @@ def test_convert_ontra_manhattan_round_trip(tmp_path: Path) -> None:
     assert collection["transformations"][0]["code_version"] == "test-version"
 
     nodes = pq.read_table(
-        output / "tables/networks/pool25-haversine/nodes.parquet"
+        output / "tables/networks/pool25-graphhopper-car-x1p4/nodes.parquet"
     ).to_pydict()
     assert "tlc-zone-010-pool-01" in nodes["node_id"]
 
     matrix_files = collection["artifacts"][
-        "ontra-manhattan-tlc-2025-01-22-v1.pool25-haversine.nodes.travel-times"
+        "ontra-manhattan-tlc-2025-01-22-v1.pool25-graphhopper-car-x1p4.nodes.travel-times"
     ]["files"]
     assert [file["row_count"] for file in matrix_files] == [10, 10, 5]
+    assert _GraphHopperHandler.route_count == 20
+
+    matrix = pq.read_table(output / matrix_files[0]["path"]).to_pydict()
+    assert matrix["travel_time_ms"][:5] == [0, 3000, 3000, 3000, 3000]
+    assert matrix["distance_mm"][:5] == [0, 12345, 12345, 12345, 12345]
 
 
 def test_converter_rejects_nonpositive_matrix_shard_size(tmp_path: Path) -> None:
@@ -114,6 +179,10 @@ def test_converter_rejects_nonpositive_matrix_shard_size(tmp_path: Path) -> None
             source,
             tmp_path / "collection",
             "test-version",
+            graphhopper_url="http://127.0.0.1:1",
+            osm_pbf_sha256="0" * 64,
+            graphhopper_build="test-build",
+            graphhopper_config_sha256="1" * 64,
             enforce_pins=False,
             balanced_fleet_sizes=(4,),
             matrix_shard_origins=0,

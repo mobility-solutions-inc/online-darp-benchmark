@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import hashlib
+import http.client
 import json
-import math
 import struct
+import threading
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode, urlsplit
+
+import pyarrow.parquet as pq
 
 from .parquet_collection import (
     FORMAT_VERSION,
@@ -29,9 +34,13 @@ GENERATION_SEED = 20250122
 SOURCE_TIME_ORIGIN = "2025-01-22T08:00:00-05:00"
 SOURCE_EPOCH_SECONDS = 1_737_550_800
 SERVICE_TIME_MS = 30_000
-AVERAGE_SPEED_KMH = 30.0
-HAVERSINE_BUFFER = 1.2
-EARTH_RADIUS_KM = 6371.0
+TRAVEL_TIME_MULTIPLIER_NUMERATOR = 7
+TRAVEL_TIME_MULTIPLIER_DENOMINATOR = 5
+GRAPHHOPPER_PROFILE = "car"
+GRAPHHOPPER_COMMIT = "80ed17c5fa3f71175949ee0ad44732391172e03a"
+OSM_SOURCE_URL = (
+    "https://download.geofabrik.de/north-america/us-northeast-260801.osm.pbf"
+)
 BALANCED_SHIFT_END_MS = 14_400_000
 
 REQUESTS_FILENAME = "requests_manhattan_tlc_8am_pool25.json"
@@ -67,6 +76,20 @@ CITATIONS_BIB = """@misc{nyctlc2025triprecords,
   url = {https://github.com/mobility-solutions-inc/ontra},
   note = {Commit 6d4f168a0724a0f0bc7795b57f75fac8cf3010dd}
 }
+
+@misc{geofabrik2026usnortheast,
+  author = {{Geofabrik GmbH and OpenStreetMap contributors}},
+  title = {US Northeast OpenStreetMap extract, 2026-08-01},
+  year = {2026},
+  url = {https://download.geofabrik.de/north-america/us-northeast.html}
+}
+
+@software{graphhopper11,
+  author = {{GraphHopper contributors}},
+  title = {GraphHopper},
+  year = {2026},
+  url = {https://github.com/graphhopper/graphhopper}
+}
 """
 
 UPSTREAM_NOTICES = """# Ontra Manhattan TLC public-instance notices
@@ -80,6 +103,11 @@ Taxi and Limousine Commission public trip records and taxi-zone geometry.
   https://cityofnewyork.github.io/opendatatsm/publicpolicies.html
 - Generator source:
   https://github.com/mobility-solutions-inc/ontra/tree/6d4f168a0724a0f0bc7795b57f75fac8cf3010dd/dispatching/scripts
+- Road-network source and license:
+  https://download.geofabrik.de/north-america/us-northeast.html
+  https://www.openstreetmap.org/copyright
+- Routing engine:
+  https://github.com/mobility-solutions-inc/graphhopper
 
 NYC Open Data requires source/version/modification identification when data are
 republished. The City and TLC make no warranty about completeness, accuracy, or
@@ -89,7 +117,7 @@ may be incomplete or inaccurate.
 The benchmark rows are not observed door-to-door passenger trajectories. The
 source exposes pickup/drop-off taxi zones and times. Ontra sampled synthetic
 points inside those zones, remapped them to a frozen routable point pool, created
-synthetic fleets, and applies a deterministic great-circle travel model.
+synthetic fleets, and routed the complete point matrix with GraphHopper.
 
 The normalized collection is released under CC BY 4.0. Attribution must identify
 the NYC TLC source and Mobility Solutions Inc modifications. No City endorsement
@@ -216,79 +244,215 @@ def _write_component(
     )
 
 
+class _GraphHopperClient:
+    def __init__(self, base_url: str, timeout_seconds: int = 60) -> None:
+        parsed = urlsplit(base_url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise ValueError("GraphHopper URL must be an absolute HTTP(S) URL")
+        self.scheme = parsed.scheme
+        self.host = parsed.hostname
+        self.port = parsed.port
+        self.base_path = parsed.path.rstrip("/")
+        self.timeout_seconds = timeout_seconds
+        self.local = threading.local()
+
+    def _connection(self) -> http.client.HTTPConnection:
+        connection = getattr(self.local, "connection", None)
+        if connection is None:
+            connection_type = (
+                http.client.HTTPSConnection
+                if self.scheme == "https"
+                else http.client.HTTPConnection
+            )
+            connection = connection_type(
+                self.host, self.port, timeout=self.timeout_seconds
+            )
+            self.local.connection = connection
+        return connection
+
+    def _get_json(self, path: str) -> dict[str, Any]:
+        last_error: Exception | None = None
+        for attempt in range(3):
+            connection = self._connection()
+            try:
+                connection.request("GET", path)
+                response = connection.getresponse()
+                body = response.read()
+                if response.status != 200:
+                    raise RuntimeError(
+                        f"GraphHopper returned HTTP {response.status}: {body[:500]!r}"
+                    )
+                value = json.loads(body)
+                if not isinstance(value, dict):
+                    raise TypeError("GraphHopper response is not a JSON object")
+                return value
+            except (OSError, http.client.HTTPException, json.JSONDecodeError, RuntimeError) as error:
+                last_error = error
+                connection.close()
+                self.local.connection = None
+                if attempt == 2:
+                    break
+        raise RuntimeError(f"GraphHopper request failed after three attempts: {path}") from last_error
+
+    def info(self) -> dict[str, Any]:
+        return self._get_json(f"{self.base_path}/info")
+
+    def route(
+        self,
+        coordinates: tuple[tuple[float, float], tuple[float, float]],
+    ) -> tuple[int, int]:
+        origin, destination = coordinates
+        query = urlencode(
+            [
+                ("point", f"{origin[0]:.6f},{origin[1]:.6f}"),
+                ("point", f"{destination[0]:.6f},{destination[1]:.6f}"),
+                ("profile", GRAPHHOPPER_PROFILE),
+                ("calc_points", "false"),
+                ("instructions", "false"),
+            ]
+        )
+        response = self._get_json(f"{self.base_path}/route?{query}")
+        paths = response.get("paths")
+        if not isinstance(paths, list) or not paths:
+            raise RuntimeError(f"GraphHopper returned no path for {origin} -> {destination}")
+        path = paths[0]
+        raw_time_ms = int(path["time"])
+        raw_seconds = raw_time_ms // 1000
+        adjusted_seconds = (
+            raw_seconds * TRAVEL_TIME_MULTIPLIER_NUMERATOR
+            + TRAVEL_TIME_MULTIPLIER_DENOMINATOR // 2
+        ) // TRAVEL_TIME_MULTIPLIER_DENOMINATOR
+        distance_mm = int(float(path["distance"]) * 1000.0 + 0.5)
+        return adjusted_seconds * 1000, distance_mm
+
+
+def _existing_parquet_record(
+    path: Path,
+    *,
+    expected_rows: int,
+    artifact_id: str,
+) -> dict[str, Any] | None:
+    if not path.is_file():
+        return None
+    parquet_file = pq.ParquetFile(path)
+    metadata = parquet_file.schema_arrow.metadata or {}
+    if parquet_file.metadata.num_rows != expected_rows:
+        return None
+    if metadata.get(b"online_darp.artifact_id") != artifact_id.encode():
+        return None
+    return {
+        "path": path.as_posix(),
+        "sha256": sha256_file(path),
+        "byte_size": path.stat().st_size,
+        "row_count": expected_rows,
+    }
+
+
 def _write_travel_matrix(
     output: Path,
     artifacts: dict[str, Any],
     nodes: list[dict[str, Any]],
     pool_sha256: str,
     shard_origins: int,
+    graphhopper_url: str,
+    graphhopper_concurrency: int,
+    osm_pbf_sha256: str,
+    graphhopper_build: str,
+    graphhopper_config_sha256: str,
 ) -> str:
-    artifact_id = f"{COLLECTION_ID}.pool25-haversine.nodes.travel-times"
+    artifact_id = f"{COLLECTION_ID}.pool25-graphhopper-car-x1p4.nodes.travel-times"
     latitudes = [struct.unpack("<BIdd", node["geometry"])[3] for node in nodes]
     longitudes = [struct.unpack("<BIdd", node["geometry"])[2] for node in nodes]
-    lat_radians = [math.radians(value) for value in latitudes]
+    coordinates = list(zip(latitudes, longitudes, strict=True))
     file_records: list[dict[str, Any]] = []
     node_count = len(nodes)
-    for start in range(0, node_count, shard_origins):
-        end = min(start + shard_origins, node_count)
-        columns: dict[str, list[Any]] = {
-            "from_node_index": [],
-            "to_node_index": [],
-            "travel_time_ms": [],
-            "distance_mm": [],
-        }
-        for origin in range(start, end):
-            lat1 = lat_radians[origin]
-            lon1 = math.radians(longitudes[origin])
-            for destination in range(node_count):
-                columns["from_node_index"].append(origin)
-                columns["to_node_index"].append(destination)
-                if origin == destination:
-                    distance_km = 0.0
-                else:
-                    delta_lat = lat_radians[destination] - lat1
-                    delta_lon = math.radians(longitudes[destination]) - lon1
-                    value = (
-                        math.sin(delta_lat / 2.0) ** 2
-                        + math.cos(lat1)
-                        * math.cos(lat_radians[destination])
-                        * math.sin(delta_lon / 2.0) ** 2
+    client = _GraphHopperClient(graphhopper_url)
+    graphhopper_info = client.info()
+    if GRAPHHOPPER_PROFILE not in {
+        profile.get("name") for profile in graphhopper_info.get("profiles", [])
+    }:
+        raise ValueError(f"GraphHopper server does not expose {GRAPHHOPPER_PROFILE!r}")
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=graphhopper_concurrency
+    ) as executor:
+        for start in range(0, node_count, shard_origins):
+            end = min(start + shard_origins, node_count)
+            relative_path = (
+                "tables/networks/pool25-graphhopper-car-x1p4/travel-times/"
+                f"part-{start:05d}-{end - 1:05d}.parquet"
+            )
+            absolute_path = output / relative_path
+            expected_rows = (end - start) * node_count
+            record = _existing_parquet_record(
+                absolute_path,
+                expected_rows=expected_rows,
+                artifact_id=artifact_id,
+            )
+            if record is None:
+                columns: dict[str, list[Any]] = {
+                    "from_node_index": [],
+                    "to_node_index": [],
+                    "travel_time_ms": [],
+                    "distance_mm": [],
+                }
+                for origin in range(start, end):
+                    destinations = [
+                        destination
+                        for destination in range(node_count)
+                        if destination != origin
+                    ]
+                    pairs = (
+                        (coordinates[origin], coordinates[destination])
+                        for destination in destinations
                     )
-                    central_angle = 2.0 * math.atan2(
-                        math.sqrt(value), math.sqrt(max(0.0, 1.0 - value))
-                    )
-                    distance_km = EARTH_RADIUS_KM * central_angle
-                travel_seconds = math.ceil(
-                    distance_km / AVERAGE_SPEED_KMH * 3600.0 * HAVERSINE_BUFFER
+                    routed = iter(executor.map(client.route, pairs))
+                    for destination in range(node_count):
+                        columns["from_node_index"].append(origin)
+                        columns["to_node_index"].append(destination)
+                        if destination == origin:
+                            travel_time_ms, distance_mm = 0, 0
+                        else:
+                            travel_time_ms, distance_mm = next(routed)
+                        columns["travel_time_ms"].append(travel_time_ms)
+                        columns["distance_mm"].append(distance_mm)
+                    if (origin - start + 1) % 16 == 0 or origin + 1 == end:
+                        print(
+                            f"GraphHopper matrix: completed origins {start}-{origin} "
+                            f"of {node_count - 1}",
+                            flush=True,
+                        )
+                record = write_parquet(
+                    absolute_path,
+                    columns,
+                    schema_name="travel_times",
+                    collection_id=COLLECTION_ID,
+                    artifact_id=artifact_id,
                 )
-                columns["travel_time_ms"].append(travel_seconds * 1000)
-                columns["distance_mm"].append(round(distance_km * 1_000_000))
-        relative_path = (
-            "tables/networks/pool25-haversine/travel-times/"
-            f"part-{start:05d}-{end - 1:05d}.parquet"
-        )
-        record = write_parquet(
-            output / relative_path,
-            columns,
-            schema_name="travel_times",
-            collection_id=COLLECTION_ID,
-            artifact_id=artifact_id,
-        )
-        record["path"] = relative_path
-        file_records.append(record)
+            record["path"] = relative_path
+            file_records.append(record)
     artifacts[artifact_id] = {
         "role": "travel_times",
         "schema_name": "travel_times",
         "schema_version": SCHEMA_VERSION,
         "sort_keys": SORT_KEYS["travel_times"],
         "files": file_records,
-        "source_sha256": pool_sha256,
+        "source_sha256": [pool_sha256, osm_pbf_sha256],
         "travel_model": {
-            "name": "ontra-rust-haversine-fallback",
-            "earth_radius_km": EARTH_RADIUS_KM,
-            "average_speed_kmh": AVERAGE_SPEED_KMH,
-            "buffer_multiplier": HAVERSINE_BUFFER,
-            "rounding": "ceil whole seconds; distance rounded to millimeters",
+            "name": "graphhopper-car-x1p4",
+            "profile": GRAPHHOPPER_PROFILE,
+            "contraction_hierarchies": True,
+            "graphhopper_build": graphhopper_build,
+            "graphhopper_source_commit": GRAPHHOPPER_COMMIT,
+            "graphhopper_config_sha256": graphhopper_config_sha256,
+            "graphhopper_server_info": graphhopper_info,
+            "osm_source_url": OSM_SOURCE_URL,
+            "osm_pbf_sha256": osm_pbf_sha256,
+            "time_semantics": (
+                "GraphHopper milliseconds truncated to whole seconds, multiplied by "
+                "1.4, rounded to nearest whole second, then stored as milliseconds"
+            ),
+            "time_multiplier": 1.4,
+            "distance_semantics": "GraphHopper road meters rounded to millimeters",
         },
     }
     return artifact_id
@@ -414,14 +578,31 @@ def convert(
     output: Path,
     converter_version: str,
     *,
+    graphhopper_url: str,
+    osm_pbf_sha256: str,
+    graphhopper_build: str,
+    graphhopper_config_sha256: str,
     enforce_pins: bool = True,
     balanced_fleet_sizes: tuple[int, ...] = (1000, 2000, 4000),
     matrix_shard_origins: int = 128,
+    graphhopper_concurrency: int = 128,
 ) -> dict[str, Any]:
     if (output / "collection.yaml").exists():
         raise FileExistsError(f"refusing to replace existing collection: {output}")
     if matrix_shard_origins < 1:
         raise ValueError("matrix_shard_origins must be at least one")
+    if graphhopper_concurrency < 1:
+        raise ValueError("graphhopper_concurrency must be at least one")
+    for label, digest in (
+        ("osm_pbf_sha256", osm_pbf_sha256),
+        ("graphhopper_config_sha256", graphhopper_config_sha256),
+    ):
+        if len(digest) != 64 or any(
+            character not in "0123456789abcdef" for character in digest
+        ):
+            raise ValueError(f"{label} must be 64 lowercase hexadecimal characters")
+    if not graphhopper_build.strip():
+        raise ValueError("graphhopper_build must not be empty")
     source_requests, source_vehicles, pool = _load_source(source, enforce_pins)
     nodes, point_to_index, pickup_nodes_by_zone = _used_nodes(
         source_requests, source_vehicles, pool
@@ -431,20 +612,29 @@ def convert(
     requests_sha = sha256_file(source / REQUESTS_FILENAME)
     historical_fleet_sha = sha256_file(source / HISTORICAL_FLEET_FILENAME)
 
-    nodes_id = f"{COLLECTION_ID}.pool25-haversine.nodes"
+    nodes_id = f"{COLLECTION_ID}.pool25-graphhopper-car-x1p4.nodes"
     _write_component(
         output,
         artifacts,
         artifact_id=nodes_id,
-        relative_path="tables/networks/pool25-haversine/nodes.parquet",
+        relative_path="tables/networks/pool25-graphhopper-car-x1p4/nodes.parquet",
         rows=nodes,
         role="nodes",
-        source_sha256=pool_sha,
+        source_sha256=[pool_sha, requests_sha, historical_fleet_sha],
         spatial_profile="geographic",
         crs="OGC:CRS84",
     )
     travel_id = _write_travel_matrix(
-        output, artifacts, nodes, pool_sha, matrix_shard_origins
+        output,
+        artifacts,
+        nodes,
+        pool_sha,
+        matrix_shard_origins,
+        graphhopper_url,
+        graphhopper_concurrency,
+        osm_pbf_sha256,
+        graphhopper_build,
+        graphhopper_config_sha256,
     )
 
     request_columns, reveal_columns = _requests(source_requests, point_to_index)
@@ -580,8 +770,8 @@ def convert(
                 "max_ride_time": "not imposed",
                 "point_semantics": "synthetic frozen point sampled within each TLC taxi zone",
                 "travel_model": (
-                    "Rust Haversine fallback: Earth radius 6371 km, 30 km/h, 1.2 buffer, "
-                    "ceil to whole seconds"
+                    "GraphHopper car profile with turn costs and contraction hierarchies; "
+                    "Rust-compatible whole-second conversion and 1.4 time multiplier"
                 ),
                 "fleet": fleet["provenance"],
             },
@@ -598,6 +788,7 @@ def convert(
     source_checksums = {
         **{name: sha256_file(source / name) for name in PINNED_SOURCE_SHA256},
         **{f"upstream/{name}": digest for name, digest in UPSTREAM_TLC_SHA256.items()},
+        "upstream/us-northeast-260801.osm.pbf": osm_pbf_sha256,
     }
     (provenance_root / "source-checksums.sha256").write_text(
         "".join(f"{digest}  {name}\n" for name, digest in sorted(source_checksums.items())),
@@ -613,10 +804,19 @@ def convert(
             "generation_seed": GENERATION_SEED,
             "service_time_ms": SERVICE_TIME_MS,
             "travel_model": {
-                "earth_radius_km": EARTH_RADIUS_KM,
-                "average_speed_kmh": AVERAGE_SPEED_KMH,
-                "buffer_multiplier": HAVERSINE_BUFFER,
-                "rounding": "ceil whole seconds",
+                "engine": "GraphHopper",
+                "profile": GRAPHHOPPER_PROFILE,
+                "contraction_hierarchies": True,
+                "graphhopper_build": graphhopper_build,
+                "graphhopper_source_commit": GRAPHHOPPER_COMMIT,
+                "graphhopper_config_sha256": graphhopper_config_sha256,
+                "osm_source_url": OSM_SOURCE_URL,
+                "osm_pbf_sha256": osm_pbf_sha256,
+                "time_multiplier": 1.4,
+                "rounding": (
+                    "truncate raw milliseconds to seconds, multiply by 1.4, "
+                    "round to nearest second"
+                ),
             },
             "balanced_fleet_sizes": list(balanced_fleet_sizes),
             "balanced_fleet_capacity_mix": {"capacity_5": 0.75, "capacity_7": 0.25},
@@ -641,6 +841,9 @@ def convert(
                 "https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page",
                 "https://cityofnewyork.github.io/opendatatsm/publicpolicies.html",
                 "https://github.com/mobility-solutions-inc/ontra",
+                "https://download.geofabrik.de/north-america/us-northeast.html",
+                "https://www.openstreetmap.org/copyright",
+                "https://github.com/mobility-solutions-inc/graphhopper",
             ],
         },
         "license": {
@@ -691,6 +894,32 @@ def build_parser() -> argparse.ArgumentParser:
         default=128,
         help="number of matrix origins in each Parquet shard",
     )
+    parser.add_argument(
+        "--graphhopper-url",
+        default="http://localhost:8989",
+        help="GraphHopper server exposing the pinned car profile",
+    )
+    parser.add_argument(
+        "--graphhopper-concurrency",
+        type=int,
+        default=128,
+        help="maximum concurrent GraphHopper route requests",
+    )
+    parser.add_argument(
+        "--osm-pbf-sha256",
+        required=True,
+        help="SHA-256 of the pinned Geofabrik OSM PBF loaded by GraphHopper",
+    )
+    parser.add_argument(
+        "--graphhopper-build",
+        required=True,
+        help="immutable GraphHopper image ID or equivalent build identifier",
+    )
+    parser.add_argument(
+        "--graphhopper-config-sha256",
+        required=True,
+        help="SHA-256 of the GraphHopper YAML configuration",
+    )
     return parser
 
 
@@ -700,7 +929,12 @@ def main(argv: list[str] | None = None) -> int:
         args.source,
         args.output,
         args.converter_version,
+        graphhopper_url=args.graphhopper_url,
+        osm_pbf_sha256=args.osm_pbf_sha256,
+        graphhopper_build=args.graphhopper_build,
+        graphhopper_config_sha256=args.graphhopper_config_sha256,
         matrix_shard_origins=args.matrix_shard_origins,
+        graphhopper_concurrency=args.graphhopper_concurrency,
     )
     print(json.dumps(summary, indent=2))
     return 0

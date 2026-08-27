@@ -39,7 +39,7 @@ TRAVEL_TIME_MULTIPLIER_DENOMINATOR = 5
 GRAPHHOPPER_PROFILE = "car"
 GRAPHHOPPER_COMMIT = "80ed17c5fa3f71175949ee0ad44732391172e03a"
 OSM_SOURCE_URL = (
-    "https://download.geofabrik.de/north-america/us-northeast-260801.osm.pbf"
+    "https://download.geofabrik.de/north-america/us/new-york-260801.osm.pbf"
 )
 BALANCED_SHIFT_END_MS = 14_400_000
 
@@ -77,11 +77,11 @@ CITATIONS_BIB = """@misc{nyctlc2025triprecords,
   note = {Commit 6d4f168a0724a0f0bc7795b57f75fac8cf3010dd}
 }
 
-@misc{geofabrik2026usnortheast,
+@misc{geofabrik2026newyork,
   author = {{Geofabrik GmbH and OpenStreetMap contributors}},
-  title = {US Northeast OpenStreetMap extract, 2026-08-01},
+  title = {New York OpenStreetMap extract, 2026-08-01},
   year = {2026},
-  url = {https://download.geofabrik.de/north-america/us-northeast.html}
+  url = {https://download.geofabrik.de/north-america/us/new-york.html}
 }
 
 @software{graphhopper11,
@@ -104,7 +104,7 @@ Taxi and Limousine Commission public trip records and taxi-zone geometry.
 - Generator source:
   https://github.com/mobility-solutions-inc/ontra/tree/6d4f168a0724a0f0bc7795b57f75fac8cf3010dd/dispatching/scripts
 - Road-network source and license:
-  https://download.geofabrik.de/north-america/us-northeast.html
+  https://download.geofabrik.de/north-america/us/new-york.html
   https://www.openstreetmap.org/copyright
 - Routing engine:
   https://github.com/mobility-solutions-inc/graphhopper
@@ -790,7 +790,7 @@ def convert(
     source_checksums = {
         **{name: sha256_file(source / name) for name in PINNED_SOURCE_SHA256},
         **{f"upstream/{name}": digest for name, digest in UPSTREAM_TLC_SHA256.items()},
-        "upstream/us-northeast-260801.osm.pbf": osm_pbf_sha256,
+        "upstream/new-york-260801.osm.pbf": osm_pbf_sha256,
     }
     (provenance_root / "source-checksums.sha256").write_text(
         "".join(f"{digest}  {name}\n" for name, digest in sorted(source_checksums.items())),
@@ -843,7 +843,7 @@ def convert(
                 "https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page",
                 "https://cityofnewyork.github.io/opendatatsm/publicpolicies.html",
                 "https://github.com/mobility-solutions-inc/ontra",
-                "https://download.geofabrik.de/north-america/us-northeast.html",
+                "https://download.geofabrik.de/north-america/us/new-york.html",
                 "https://www.openstreetmap.org/copyright",
                 "https://github.com/mobility-solutions-inc/graphhopper",
             ],

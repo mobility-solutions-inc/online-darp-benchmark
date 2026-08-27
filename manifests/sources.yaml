@@ -1,0 +1,51 @@
+schema_version: 0.1.0
+status: incubation
+policy: >-
+  The v1 public suite will include every applicable instance in each pinned
+  source release. Source files are not redistributed until the import gate in
+  THIRD_PARTY_NOTICES.md is satisfied.
+sources:
+  - source_id: eccel-ddarp-dpdptw
+    intended_release: v1.2
+    role: small
+    problem_families:
+      - darp
+      - dpdptw
+    canonical_url: https://doi.org/10.5281/zenodo.4107192
+    repository_url: https://github.com/renan-eccel/instances-DDARP-DPDPTW
+    inclusion_rule: all_applicable_instances
+    pin:
+      status: pending_import_audit
+      commit: null
+    redistribution:
+      status: blocked_pending_license_confirmation
+      note: Zenodo describes the license as Other (Open) without specific terms.
+    citations:
+      - https://doi.org/10.5281/zenodo.4107192
+      - https://doi.org/10.14295/transportes.v28i4.2412
+      - https://doi.org/10.1287/ijoc.1110.0454
+    notes: >-
+      Keep DPDPTW as a separately labeled adjacent task. Preserve transitive
+      citations for the original static instance families.
+
+  - source_id: nyc-darp
+    intended_release: v1.0
+    role: large
+    problem_families:
+      - darp
+    canonical_url: https://doi.org/10.5281/zenodo.20452171
+    repository_url: https://github.com/lab-core/dynamic-ips
+    inclusion_rule: all_request_instances_and_vehicle_deployments
+    pin:
+      status: pending_import_audit
+      commit: null
+    redistribution:
+      status: blocked_pending_license_confirmation
+      note: The Zenodo record does not currently state a dataset license.
+    citations:
+      - https://doi.org/10.5281/zenodo.20452171
+      - https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page
+      - https://www.openstreetmap.org/copyright
+      - https://github.com/Project-OSRM/osrm-backend
+    notes: Riley_Benchmark is outside the initial two-source suite.
+

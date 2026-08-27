@@ -1,0 +1,48 @@
+# Start from examples/result.yaml and replace every value below. Do not delete
+# failed or unsupported runs; use run_status and failure_reason.
+schema_version: 0.1.0
+result_id: <algorithm.instance.lookahead.seed>
+benchmark_version: <semantic-version>
+instance_id: <instance-id>
+instance_sha256: <64-lowercase-hex-characters>
+supersedes_result_id: null
+algorithm:
+  name: <algorithm-name>
+  version: <release-or-commit>
+  artifact_url: <immutable-source-or-container-url>
+  artifact_digest: <commit-or-container-digest>
+  internal_objective: <objective-or-reward-description>
+  hard_and_soft_constraints: <constraint-description>
+  prediction_data_track: <none-provided_only-or-external_disclosed>
+  uses_prediction: false
+  training_and_tuning_data: null
+  allows_relocation: false
+  relocation_policy: null
+evaluation:
+  mode: online
+  offline_objective: null
+  horizons:
+    information: <seconds-or-full>
+    planning: <seconds-or-full>
+    commitment: <nonnegative-seconds>
+  acceptance_policy:
+    accepted_request_may_be_rejected: false
+    accepted_request_may_be_reassigned: false
+    pickup_promise_may_change: false
+run:
+  run_status: <completed-timeout-out_of_memory-error-or-unsupported>
+  failure_reason: null
+  random_seed: <nonnegative-integer>
+  started_at: <rfc3339-timestamp>
+  hardware: <cpu-memory-and-accelerator>
+  operating_system: <os-and-version>
+  time_limit_seconds: <positive-integer>
+  memory_limit_mb: <positive-integer>
+# Copy the complete metrics matrix from examples/result.yaml for completed runs.
+artifacts:
+  event_log_uri: <relative-path-or-immutable-url>
+  event_log_sha256: <64-lowercase-hex-characters>
+  solution_uri: null
+  invocation: <exact-command-or-workflow>
+notes: null
+

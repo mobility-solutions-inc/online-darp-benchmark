@@ -1,0 +1,59 @@
+name: Benchmark proposal
+description: Propose a source, metric, semantic, governance, or protocol change.
+title: "[Proposal]: "
+labels:
+  - proposal
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Proposal type
+      options:
+        - New public source
+        - Metric definition
+        - Execution or commitment semantics
+        - Offline reference objective
+        - Prediction-data track
+        - Governance
+        - Other benchmark change
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation and evidence
+    validations:
+      required: true
+  - type: textarea
+    id: change
+    attributes:
+      label: Proposed change
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Comparability and migration impact
+      description: Say whether existing instances or results would change.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation plan
+    validations:
+      required: true
+  - type: checkboxes
+    id: conflicts
+    attributes:
+      label: Conflicts and interests
+      options:
+        - label: I have disclosed relevant authorship, funding, employment, or algorithm interests above.
+          required: true
+

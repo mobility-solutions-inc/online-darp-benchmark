@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mobility-solutions-inc.github.io/online-darp-benchmark/schemas/event.schema.json",
+  "title": "Online DARP canonical event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "instance_id",
+    "sequence",
+    "simulation_time",
+    "event_type",
+    "payload"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1.0"},
+    "run_id": {"type": "string", "minLength": 1},
+    "instance_id": {"type": "string", "minLength": 1},
+    "sequence": {"type": "integer", "minimum": 0},
+    "simulation_time": {"type": "number", "minimum": 0},
+    "event_type": {
+      "enum": [
+        "run_started",
+        "request_revealed",
+        "decision_started",
+        "decision_finished",
+        "request_accepted",
+        "request_rejected",
+        "request_reassigned",
+        "pickup_promise_changed",
+        "vehicle_departed",
+        "vehicle_arrived",
+        "passenger_picked_up",
+        "passenger_dropped_off",
+        "relocation_started",
+        "relocation_finished",
+        "violation",
+        "run_finished"
+      ]
+    },
+    "request_id": {"type": ["string", "null"]},
+    "vehicle_id": {"type": ["string", "null"]},
+    "payload": {"type": "object"}
+  }
+}
+

@@ -1,0 +1,26 @@
+{
+  "vehicles": [
+    {"vehicle_id": "vehicle-1", "capacity": 2, "start_node": "depot", "available_time": 0}
+  ],
+  "requests": [
+    {
+      "request_id": "request-1",
+      "passengers": 1,
+      "pickup_node": "a",
+      "dropoff_node": "b",
+      "base_reveal_time": 0,
+      "earliest_pickup_time": 300,
+      "latest_pickup_time": 900
+    },
+    {
+      "request_id": "request-2",
+      "passengers": 1,
+      "pickup_node": "c",
+      "dropoff_node": "d",
+      "base_reveal_time": 600,
+      "earliest_pickup_time": 900,
+      "latest_pickup_time": 1200
+    }
+  ]
+}
+

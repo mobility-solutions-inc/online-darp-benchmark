@@ -1,0 +1,8 @@
+title: Online DARP Benchmark
+description: A reproducible, multidimensional benchmark for online dial-a-ride algorithms.
+theme: jekyll-theme-cayman
+url: https://mobility-solutions-inc.github.io
+baseurl: /online-darp-benchmark
+repository: mobility-solutions-inc/online-darp-benchmark
+show_downloads: false
+

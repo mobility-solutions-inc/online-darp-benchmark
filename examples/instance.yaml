@@ -1,0 +1,47 @@
+schema_version: 0.1.0
+instance_id: synthetic.smoke.001
+title: Synthetic two-request smoke instance
+problem_family: darp
+tier: exact_classical
+source:
+  source_id: benchmark-synthetic
+  release: v0.1.0
+  canonical_url: https://github.com/mobility-solutions-inc/online-darp-benchmark
+  source_relative_path: examples/smoke-source.json
+  source_sha256: 647e74f49e12ed75efa154e967e22a4b46b6ca732191b27c3257a120be4e4ca8
+  parent_instance_id: null
+  parent_sha256: null
+  citations:
+    - Online DARP Benchmark synthetic example, v0.1.0
+data:
+  requests_uri: examples/smoke-source.json#/requests
+  vehicles_uri: examples/smoke-source.json#/vehicles
+  network_uri: null
+  travel_times_uri: null
+  normalized_sha256: 647e74f49e12ed75efa154e967e22a4b46b6ca732191b27c3257a120be4e4ca8
+time:
+  unit: seconds
+  origin: synthetic service start
+  timezone: null
+  horizon: 3600
+fleet:
+  vehicle_count: 1
+  initial_state_defined: true
+  homogeneous_capacity: 2
+  relocation_allowed: true
+requests:
+  request_count: 2
+  passenger_count: 2
+  base_reveal_time_field: base_reveal_time
+  earliest_pickup_time_field: earliest_pickup_time
+  pickup_window_fields:
+    - earliest_pickup_time
+    - latest_pickup_time
+  delivery_window_fields: null
+transformations: []
+license:
+  spdx_or_name: MIT
+  license_url: https://spdx.org/licenses/MIT.html
+  redistribution_confirmed: true
+  notice_path: LICENSE
+notes: Schema and validator smoke test; not an official benchmark instance.

@@ -1,0 +1,53 @@
+# Replace every angle-bracket placeholder. See schemas/instance.schema.json.
+schema_version: 0.1.0
+instance_id: <source.release.instance-id>
+title: <human-readable title>
+problem_family: <darp-or-dpdptw>
+tier: <exact_classical-exact_realistic-bounded_medium-or-large_online>
+source:
+  source_id: <registered-source-id>
+  release: <source-release>
+  canonical_url: <doi-or-immutable-url>
+  source_relative_path: <path-inside-source-release>
+  source_sha256: <64-lowercase-hex-characters>
+  parent_instance_id: null
+  parent_sha256: null
+  citations:
+    - <full-citation-or-persistent-identifier>
+data:
+  requests_uri: <relative-path-or-immutable-url>
+  vehicles_uri: <relative-path-or-immutable-url>
+  network_uri: null
+  travel_times_uri: null
+  normalized_sha256: <64-lowercase-hex-characters>
+time:
+  unit: seconds
+  origin: <time-zero-definition>
+  timezone: null
+  horizon: <positive-integer-seconds>
+fleet:
+  vehicle_count: <positive-integer>
+  initial_state_defined: true
+  homogeneous_capacity: null
+  relocation_allowed: true
+requests:
+  request_count: <positive-integer>
+  passenger_count: null
+  base_reveal_time_field: <field-name>
+  earliest_pickup_time_field: <field-name>
+  pickup_window_fields: null
+  delivery_window_fields: null
+transformations:
+  - name: <transformation-name>
+    version: <code-version-or-commit>
+    code_url: <immutable-code-url>
+    parameters: {}
+    random_seed: null
+    deterministic: true
+license:
+  spdx_or_name: <license-name>
+  license_url: <license-url>
+  redistribution_confirmed: true
+  notice_path: <path-to-local-notice>
+notes: null
+

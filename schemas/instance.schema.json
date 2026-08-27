@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mobility-solutions-inc.github.io/online-darp-benchmark/schemas/instance.schema.json",
+  "title": "Online DARP instance manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "instance_id",
+    "problem_family",
+    "tier",
+    "source",
+    "data",
+    "time",
+    "fleet",
+    "requests",
+    "license"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1.0"},
+    "instance_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+    },
+    "title": {"type": "string", "minLength": 1},
+    "problem_family": {"enum": ["darp", "dpdptw"]},
+    "tier": {
+      "enum": ["exact_classical", "exact_realistic", "bounded_medium", "large_online"]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_id",
+        "release",
+        "canonical_url",
+        "source_relative_path",
+        "source_sha256",
+        "citations"
+      ],
+      "properties": {
+        "source_id": {"type": "string", "minLength": 1},
+        "release": {"type": "string", "minLength": 1},
+        "canonical_url": {"type": "string", "format": "uri"},
+        "source_relative_path": {"type": "string", "minLength": 1},
+        "source_sha256": {"$ref": "#/$defs/sha256"},
+        "parent_instance_id": {"type": ["string", "null"]},
+        "parent_sha256": {
+          "oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]
+        },
+        "citations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requests_uri", "vehicles_uri", "normalized_sha256"],
+      "properties": {
+        "requests_uri": {"type": "string", "minLength": 1},
+        "vehicles_uri": {"type": "string", "minLength": 1},
+        "network_uri": {"type": ["string", "null"]},
+        "travel_times_uri": {"type": ["string", "null"]},
+        "normalized_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "time": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unit", "origin", "horizon"],
+      "properties": {
+        "unit": {"const": "seconds"},
+        "origin": {"type": "string", "minLength": 1},
+        "timezone": {"type": ["string", "null"]},
+        "horizon": {"type": "integer", "minimum": 1}
+      }
+    },
+    "fleet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["vehicle_count", "initial_state_defined"],
+      "properties": {
+        "vehicle_count": {"type": "integer", "minimum": 1},
+        "initial_state_defined": {"const": true},
+        "homogeneous_capacity": {"type": ["integer", "null"], "minimum": 1},
+        "relocation_allowed": {"type": "boolean"}
+      }
+    },
+    "requests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "request_count",
+        "base_reveal_time_field",
+        "earliest_pickup_time_field"
+      ],
+      "properties": {
+        "request_count": {"type": "integer", "minimum": 1},
+        "passenger_count": {"type": ["integer", "null"], "minimum": 1},
+        "base_reveal_time_field": {"type": "string", "minLength": 1},
+        "earliest_pickup_time_field": {"type": "string", "minLength": 1},
+        "pickup_window_fields": {
+          "type": ["array", "null"],
+          "items": {"type": "string"},
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "delivery_window_fields": {
+          "type": ["array", "null"],
+          "items": {"type": "string"},
+          "minItems": 2,
+          "maxItems": 2
+        }
+      }
+    },
+    "transformations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "version", "parameters", "deterministic"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "version": {"type": "string", "minLength": 1},
+          "code_url": {"type": ["string", "null"], "format": "uri"},
+          "parameters": {"type": "object"},
+          "random_seed": {"type": ["integer", "null"]},
+          "deterministic": {"type": "boolean"}
+        }
+      },
+      "default": []
+    },
+    "license": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["spdx_or_name", "redistribution_confirmed"],
+      "properties": {
+        "spdx_or_name": {"type": "string", "minLength": 1},
+        "license_url": {"type": ["string", "null"], "format": "uri"},
+        "redistribution_confirmed": {"const": true},
+        "notice_path": {"type": "string", "minLength": 1}
+      }
+    },
+    "notes": {"type": ["string", "null"]}
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  }
+}
+

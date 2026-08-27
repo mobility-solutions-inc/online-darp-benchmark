@@ -1,0 +1,32 @@
+name: Validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install validator
+        run: python -m pip install -e '.[dev]'
+      - name: Check schemas and examples
+        run: |
+          python -m json.tool schemas/instance.schema.json >/dev/null
+          python -m json.tool schemas/result.schema.json >/dev/null
+          python -m json.tool schemas/event.schema.json >/dev/null
+          odb-validate instance examples/instance.yaml
+          odb-validate result examples/result.yaml
+          odb-validate events examples/event-log.jsonl
+      - name: Test
+        run: pytest
+

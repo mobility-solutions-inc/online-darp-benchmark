@@ -1,0 +1,260 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mobility-solutions-inc.github.io/online-darp-benchmark/schemas/result.schema.json",
+  "title": "Online DARP benchmark result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "result_id",
+    "benchmark_version",
+    "instance_id",
+    "instance_sha256",
+    "algorithm",
+    "evaluation",
+    "run",
+    "artifacts"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1.0"},
+    "result_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,191}$"},
+    "benchmark_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "instance_id": {"type": "string", "minLength": 1},
+    "instance_sha256": {"$ref": "#/$defs/sha256"},
+    "supersedes_result_id": {"type": ["string", "null"]},
+    "algorithm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version",
+        "artifact_url",
+        "artifact_digest",
+        "internal_objective",
+        "prediction_data_track",
+        "uses_prediction",
+        "allows_relocation"
+      ],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1},
+        "artifact_url": {"type": "string", "format": "uri"},
+        "artifact_digest": {"type": "string", "minLength": 1},
+        "internal_objective": {"type": "string", "minLength": 1},
+        "hard_and_soft_constraints": {"type": ["string", "null"]},
+        "prediction_data_track": {
+          "enum": ["none", "provided_only", "external_disclosed"]
+        },
+        "uses_prediction": {"type": "boolean"},
+        "training_and_tuning_data": {"type": ["string", "null"]},
+        "allows_relocation": {"type": "boolean"},
+        "relocation_policy": {"type": ["string", "null"]}
+      }
+    },
+    "evaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "horizons", "acceptance_policy"],
+      "properties": {
+        "mode": {"enum": ["online", "offline_reference"]},
+        "offline_objective": {"type": ["string", "null"]},
+        "horizons": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["information", "planning", "commitment"],
+          "properties": {
+            "information": {"$ref": "#/$defs/horizon"},
+            "planning": {"$ref": "#/$defs/horizon"},
+            "commitment": {"type": "integer", "minimum": 0}
+          }
+        },
+        "acceptance_policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "accepted_request_may_be_rejected",
+            "accepted_request_may_be_reassigned",
+            "pickup_promise_may_change"
+          ],
+          "properties": {
+            "accepted_request_may_be_rejected": {"type": "boolean"},
+            "accepted_request_may_be_reassigned": {"type": "boolean"},
+            "pickup_promise_may_change": {"type": "boolean"}
+          }
+        }
+      }
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_status",
+        "random_seed",
+        "started_at",
+        "hardware",
+        "operating_system",
+        "time_limit_seconds",
+        "memory_limit_mb"
+      ],
+      "properties": {
+        "run_status": {"enum": ["completed", "timeout", "out_of_memory", "error", "unsupported"]},
+        "failure_reason": {"type": ["string", "null"]},
+        "random_seed": {"type": "integer", "minimum": 0},
+        "started_at": {"type": "string", "format": "date-time"},
+        "hardware": {"type": "string", "minLength": 1},
+        "operating_system": {"type": "string", "minLength": 1},
+        "time_limit_seconds": {"type": "integer", "minimum": 1},
+        "memory_limit_mb": {"type": "integer", "minimum": 1}
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["service", "passenger", "vehicle", "stability", "computation", "feasibility"],
+      "properties": {
+        "service": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["requests_offered", "requests_served", "requests_rejected", "requests_abandoned", "request_service_rate", "passengers_offered", "passengers_served", "passenger_service_rate"],
+          "properties": {
+            "requests_offered": {"$ref": "#/$defs/nullable_count"},
+            "requests_served": {"$ref": "#/$defs/nullable_count"},
+            "requests_rejected": {"$ref": "#/$defs/nullable_count"},
+            "requests_abandoned": {"$ref": "#/$defs/nullable_count"},
+            "request_service_rate": {"$ref": "#/$defs/nullable_rate"},
+            "passengers_offered": {"$ref": "#/$defs/nullable_count"},
+            "passengers_served": {"$ref": "#/$defs/nullable_count"},
+            "passenger_service_rate": {"$ref": "#/$defs/nullable_rate"}
+          }
+        },
+        "passenger": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["wait_mean_seconds", "wait_p95_seconds", "pickup_lateness_mean_seconds", "pickup_lateness_p95_seconds", "ride_mean_seconds", "ride_p95_seconds", "excess_ride_mean_seconds", "excess_ride_p95_seconds"],
+          "properties": {
+            "wait_mean_seconds": {"$ref": "#/$defs/nullable_nonnegative"},
+            "wait_p95_seconds": {"$ref": "#/$defs/nullable_nonnegative"},
+            "pickup_lateness_mean_seconds": {"$ref": "#/$defs/nullable_number"},
+            "pickup_lateness_p95_seconds": {"$ref": "#/$defs/nullable_number"},
+            "ride_mean_seconds": {"$ref": "#/$defs/nullable_nonnegative"},
+            "ride_p95_seconds": {"$ref": "#/$defs/nullable_nonnegative"},
+            "excess_ride_mean_seconds": {"$ref": "#/$defs/nullable_number"},
+            "excess_ride_p95_seconds": {"$ref": "#/$defs/nullable_number"}
+          }
+        },
+        "vehicle": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["distance_total_m", "distance_occupied_m", "distance_empty_m", "driving_total_seconds", "driving_occupied_seconds", "driving_empty_seconds", "utilization"],
+          "properties": {
+            "distance_total_m": {"$ref": "#/$defs/nullable_nonnegative"},
+            "distance_occupied_m": {"$ref": "#/$defs/nullable_nonnegative"},
+            "distance_empty_m": {"$ref": "#/$defs/nullable_nonnegative"},
+            "driving_total_seconds": {"$ref": "#/$defs/nullable_nonnegative"},
+            "driving_occupied_seconds": {"$ref": "#/$defs/nullable_nonnegative"},
+            "driving_empty_seconds": {"$ref": "#/$defs/nullable_nonnegative"},
+            "utilization": {"$ref": "#/$defs/nullable_rate"}
+          }
+        },
+        "stability": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["reassignments_after_acceptance", "pickup_promise_changes", "rejections_after_acceptance"],
+          "properties": {
+            "reassignments_after_acceptance": {"$ref": "#/$defs/nullable_count"},
+            "pickup_promise_changes": {"$ref": "#/$defs/nullable_count"},
+            "rejections_after_acceptance": {"$ref": "#/$defs/nullable_count"}
+          }
+        },
+        "computation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["decision_latency_mean_ms", "decision_latency_p95_ms", "decision_latency_max_ms", "wall_time_seconds", "peak_memory_mb", "decision_epochs", "timeouts"],
+          "properties": {
+            "decision_latency_mean_ms": {"$ref": "#/$defs/nullable_nonnegative"},
+            "decision_latency_p95_ms": {"$ref": "#/$defs/nullable_nonnegative"},
+            "decision_latency_max_ms": {"$ref": "#/$defs/nullable_nonnegative"},
+            "wall_time_seconds": {"$ref": "#/$defs/nullable_nonnegative"},
+            "peak_memory_mb": {"$ref": "#/$defs/nullable_nonnegative"},
+            "decision_epochs": {"$ref": "#/$defs/nullable_count"},
+            "timeouts": {"$ref": "#/$defs/nullable_count"}
+          }
+        },
+        "feasibility": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["capacity_violations", "pickup_window_violations", "delivery_window_violations", "max_ride_time_violations", "route_continuity_violations"],
+          "properties": {
+            "capacity_violations": {"$ref": "#/$defs/nullable_count"},
+            "pickup_window_violations": {"$ref": "#/$defs/nullable_count"},
+            "delivery_window_violations": {"$ref": "#/$defs/nullable_count"},
+            "max_ride_time_violations": {"$ref": "#/$defs/nullable_count"},
+            "route_continuity_violations": {"$ref": "#/$defs/nullable_count"}
+          }
+        },
+        "notes": {"type": ["string", "null"]}
+      }
+    },
+    "offline_certificate": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["solver", "solver_version", "primal_bound", "dual_bound", "relative_gap", "certificate_uri"],
+      "properties": {
+        "solver": {"type": "string", "minLength": 1},
+        "solver_version": {"type": "string", "minLength": 1},
+        "primal_bound": {"type": "number"},
+        "dual_bound": {"type": "number"},
+        "relative_gap": {"type": "number", "minimum": 0},
+        "certificate_uri": {"type": "string", "minLength": 1}
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_log_uri", "event_log_sha256", "invocation"],
+      "properties": {
+        "event_log_uri": {"type": "string", "minLength": 1},
+        "event_log_sha256": {"$ref": "#/$defs/sha256"},
+        "solution_uri": {"type": ["string", "null"]},
+        "invocation": {"type": "string", "minLength": 1}
+      }
+    },
+    "notes": {"type": ["string", "null"]}
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"run": {"properties": {"run_status": {"const": "completed"}}}}
+      },
+      "then": {"required": ["metrics"]}
+    },
+    {
+      "if": {
+        "properties": {"evaluation": {"properties": {"mode": {"const": "offline_reference"}}}}
+      },
+      "then": {
+        "properties": {
+          "evaluation": {
+            "required": ["offline_objective"],
+            "properties": {
+              "offline_objective": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "horizon": {
+      "oneOf": [
+        {"type": "integer", "minimum": 0},
+        {"const": "full"}
+      ]
+    },
+    "nullable_number": {"type": ["number", "null"]},
+    "nullable_nonnegative": {"type": ["number", "null"], "minimum": 0},
+    "nullable_count": {"type": ["integer", "null"], "minimum": 0},
+    "nullable_rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1}
+  }
+}

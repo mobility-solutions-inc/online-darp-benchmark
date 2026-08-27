@@ -1,0 +1,91 @@
+schema_version: 0.1.0
+result_id: synthetic-greedy.smoke.h0.seed7
+benchmark_version: 0.1.0
+instance_id: synthetic.smoke.001
+instance_sha256: 647e74f49e12ed75efa154e967e22a4b46b6ca732191b27c3257a120be4e4ca8
+supersedes_result_id: null
+algorithm:
+  name: Synthetic Greedy
+  version: 0.1.0
+  artifact_url: https://github.com/mobility-solutions-inc/online-darp-benchmark
+  artifact_digest: example-only
+  internal_objective: Accept a revealed request if the single vehicle has capacity.
+  hard_and_soft_constraints: Capacity and pickup windows are hard.
+  prediction_data_track: none
+  uses_prediction: false
+  training_and_tuning_data: null
+  allows_relocation: false
+  relocation_policy: null
+evaluation:
+  mode: online
+  offline_objective: null
+  horizons:
+    information: 0
+    planning: 900
+    commitment: 300
+  acceptance_policy:
+    accepted_request_may_be_rejected: false
+    accepted_request_may_be_reassigned: false
+    pickup_promise_may_change: false
+run:
+  run_status: completed
+  failure_reason: null
+  random_seed: 7
+  started_at: "2026-08-27T00:00:00Z"
+  hardware: Synthetic example
+  operating_system: Synthetic example
+  time_limit_seconds: 60
+  memory_limit_mb: 256
+metrics:
+  service:
+    requests_offered: 2
+    requests_served: 1
+    requests_rejected: 1
+    requests_abandoned: 0
+    request_service_rate: 0.5
+    passengers_offered: 2
+    passengers_served: 1
+    passenger_service_rate: 0.5
+  passenger:
+    wait_mean_seconds: 60
+    wait_p95_seconds: 60
+    pickup_lateness_mean_seconds: 0
+    pickup_lateness_p95_seconds: 0
+    ride_mean_seconds: 360
+    ride_p95_seconds: 360
+    excess_ride_mean_seconds: 0
+    excess_ride_p95_seconds: 0
+  vehicle:
+    distance_total_m: 3000
+    distance_occupied_m: 2000
+    distance_empty_m: 1000
+    driving_total_seconds: 720
+    driving_occupied_seconds: 360
+    driving_empty_seconds: 360
+    utilization: 0.5
+  stability:
+    reassignments_after_acceptance: 0
+    pickup_promise_changes: 0
+    rejections_after_acceptance: 0
+  computation:
+    decision_latency_mean_ms: 1.1
+    decision_latency_p95_ms: 1.5
+    decision_latency_max_ms: 1.7
+    wall_time_seconds: 0.01
+    peak_memory_mb: 12
+    decision_epochs: 2
+    timeouts: 0
+  feasibility:
+    capacity_violations: 0
+    pickup_window_violations: 0
+    delivery_window_violations: 0
+    max_ride_time_violations: 0
+    route_continuity_violations: 0
+  notes: Values are illustrative only.
+offline_certificate: null
+artifacts:
+  event_log_uri: examples/event-log.jsonl
+  event_log_sha256: dcf19a6215bba2b8f09084d4533ef82ad12a2f63e13c57ce9739f0ac249f0254
+  solution_uri: null
+  invocation: odb-example --instance examples/instance.yaml --seed 7
+notes: Schema and validator smoke test; not an official result.

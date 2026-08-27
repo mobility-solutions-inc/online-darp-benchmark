@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: >-
+  If you use this benchmark, cite this project and every underlying dataset used
+  in your experiment.
+title: Online DARP Benchmark
+type: software
+authors:
+  - name: Mobility Solutions Inc
+version: 0.1.0
+date-released: 2026-08-27
+license: MIT
+repository-code: https://github.com/mobility-solutions-inc/online-darp-benchmark
+url: https://mobility-solutions-inc.github.io/online-darp-benchmark/
+keywords:
+  - dial-a-ride problem
+  - online optimization
+  - dynamic vehicle routing
+  - mobility on demand
+  - benchmark
+

@@ -1,0 +1,47 @@
+schema_version: 0.1.0
+benchmark_version: 0.1.0
+status: incubation_not_comparable
+public_only: true
+source_membership:
+  - source_id: eccel-ddarp-dpdptw
+    release: v1.2
+    inclusion_rule: all_applicable_instances
+    task_partition:
+      darp: main_scorecard
+      dpdptw: adjacent_scorecard
+  - source_id: nyc-darp
+    release: v1.0
+    inclusion_rule: all_request_instances_and_vehicle_deployments
+    task_partition:
+      darp: main_scorecard
+lookahead:
+  unit: seconds
+  standard_points:
+    - 0
+    - 900
+    - 1800
+    - 3600
+    - 14400
+    - full
+  full_information_may_be_unsupported: true
+prediction_data_tracks:
+  - none
+  - provided_only
+  - external_disclosed
+scorecard:
+  aggregate_score: prohibited
+  groups:
+    - service
+    - passenger
+    - vehicle
+    - stability
+    - computation
+    - feasibility
+reference_policy:
+  exact_small: objective_specific_certificate_required
+  medium: best_feasible_plus_valid_bound
+  large: best_known_offline_with_budget_and_optional_bound
+hidden_evaluation:
+  enabled: false
+  status: future_sponsored_phase
+

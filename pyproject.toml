@@ -12,6 +12,7 @@ license = {text = "MIT"}
 authors = [{name = "Mobility Solutions Inc"}]
 dependencies = [
   "jsonschema[format]>=4.23,<5",
+  "pyarrow>=21,<22",
   "PyYAML>=6,<7",
 ]
 
@@ -22,6 +23,10 @@ dev = [
 
 [project.scripts]
 odb-validate = "online_darp_benchmark.validate:main"
+odb-convert-eccel = "online_darp_benchmark.convert_eccel:main"
+odb-convert-nyc = "online_darp_benchmark.convert_nyc:main"
+odb-fetch-nyc = "online_darp_benchmark.fetch_nyc:main"
+odb-validate-collection = "online_darp_benchmark.parquet_collection:main"
 
 [project.urls]
 Homepage = "https://mobility-solutions-inc.github.io/online-darp-benchmark/"

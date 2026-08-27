@@ -1,0 +1,39 @@
+schema_version: 0.1.0
+format_version: 1.0.0-draft.1
+status: prerelease
+storage_policy: ../DATA_STORAGE.md
+release:
+  tag: parquet-data-v1.0.0-draft.1
+  url: https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/tag/parquet-data-v1.0.0-draft.1
+  target_commit: 2c1633f9e8cae88af3ef25e00c60cfc2514dd576
+  canonical_archive_status: pending_zenodo_record
+collections:
+  - collection_id: eccel-ddarp-v1.2
+    collection_version: 1.0.0-draft.1
+    source_release: v1.2
+    license: MIT
+    instance_count: 68
+    artifact_count: 340
+    validation: passed
+    archive:
+      filename: eccel-ddarp-v1.2.parquet-draft.1.tar.gz
+      byte_size: 1158386
+      sha256: 69aafcc4ac5969b385ecfa611d2a5ed9664b60d8881a05aa4ea293f151cfd4a6
+      mirror_url: https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/download/parquet-data-v1.0.0-draft.1/eccel-ddarp-v1.2.parquet-draft.1.tar.gz
+      canonical_url: null
+  - collection_id: nyc-darp-v1.0
+    collection_version: 1.0.0-draft.1
+    source_release: v1.0
+    license: CC-BY-4.0
+    demand_window_count: 96
+    fleet_deployment_count: 62
+    instance_count: 2976
+    artifact_count: 277
+    excluded_nonpositive_party_size_records: 23
+    validation: passed
+    archive:
+      filename: nyc-darp-v1.0.parquet-draft.1.tar.gz
+      byte_size: 150096002
+      sha256: af1c09a4ce2ea657f0fa751d474c7c259c76ec50f016ab7b611bc2cbbc6507f4
+      mirror_url: https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/download/parquet-data-v1.0.0-draft.1/nyc-darp-v1.0.parquet-draft.1.tar.gz
+      canonical_url: null

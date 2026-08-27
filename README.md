@@ -12,9 +12,10 @@ It combines small instances with objective-specific, certified offline
 references and large instances that test operational scale.
 
 This repository is in its **v0.1 incubation phase**. It defines the benchmark
-contract, contribution process, schemas, examples, and public source registry.
-The source datasets are not yet redistributed here; each complete pinned release
-will be imported only after its license, provenance, and checksums are recorded.
+contract, contribution process, schemas, converters, examples, and public source
+registry. Complete datasets are distributed as immutable external archives, not
+committed to Git or Git LFS; every archive retains provenance, licenses,
+citations, and checksums.
 
 ## What makes this benchmark different
 
@@ -42,8 +43,10 @@ sources:
 2. [NYC-DARP v1.0](https://doi.org/10.5281/zenodo.20452171), distributed with
    [dynamic-ips](https://github.com/lab-core/dynamic-ips), for the large tier.
 
-DPDPTW instances will remain available as a separately labeled adjacent task;
-they will not be silently mixed into DARP scorecards. See
+The draft conversions currently cover all 68 Eccel DDARP request/reveal pairs and
+all 96 NYC-DARP demand windows with all 62 compatible fleet deployments. DPDPTW
+instances will remain a separately labeled adjacent task; they will not be
+silently mixed into DARP scorecards. See
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for attribution and import
 status.
 
@@ -70,7 +73,8 @@ schemas/       Versioned instance, result, and event-log contracts
 templates/     Commented templates for new submissions
 examples/      Small schema-valid examples
 manifests/     Public source and benchmark-suite registries
-src/           Validation command-line tool
+proposals/     Draft benchmark-semantic RFCs under public review
+src/           Validation and deterministic conversion command-line tools
 tests/         Contract tests
 docs/          GitHub Pages site
 ```
@@ -87,12 +91,29 @@ odb-validate events examples/event-log.jsonl
 pytest
 ```
 
+To generate and validate normalized collections:
+
+```bash
+odb-convert-eccel /path/to/instances-DDARP-DPDPTW /data/eccel-ddarp-v1.2
+odb-fetch-nyc /data/nyc-source
+odb-convert-nyc /data/nyc-source/NYC_Dataset_2015-2016 /data/nyc-darp-v1.0
+odb-validate-collection /data/eccel-ddarp-v1.2
+odb-validate-collection /data/nyc-darp-v1.0
+```
+
+See [DATA_STORAGE.md](DATA_STORAGE.md) for the Zenodo, GitHub Release, and future
+hidden-instance storage policy. Draft downloads and exact archive checksums are
+listed in [manifests/collections.yaml](manifests/collections.yaml).
+
 ## Contribute
 
 New public instances and benchmark results are welcome through pull requests.
 Start with [CONTRIBUTING.md](CONTRIBUTING.md) and use the matching pull-request
 template. Changes to benchmark semantics follow the process in
 [GOVERNANCE.md](GOVERNANCE.md).
+
+Active design proposal: [RFC-0001, Parquet Instance Package
+Format](proposals/0001-parquet-instance-format.md).
 
 ## License and citation
 
@@ -102,4 +123,3 @@ relicense them. Cite this benchmark using [CITATION.cff](CITATION.cff), and cite
 each source dataset used in an experiment.
 
 Project site: <https://mobility-solutions-inc.github.io/online-darp-benchmark/>
-

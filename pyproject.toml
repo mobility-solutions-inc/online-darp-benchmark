@@ -25,6 +25,7 @@ dev = [
 odb-validate = "online_darp_benchmark.validate:main"
 odb-convert-eccel = "online_darp_benchmark.convert_eccel:main"
 odb-convert-nyc = "online_darp_benchmark.convert_nyc:main"
+odb-convert-ontra-manhattan = "online_darp_benchmark.convert_ontra_manhattan:main"
 odb-fetch-nyc = "online_darp_benchmark.fetch_nyc:main"
 odb-validate-collection = "online_darp_benchmark.parquet_collection:main"
 

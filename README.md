@@ -35,18 +35,24 @@ citations, and checksums.
 
 ## Initial public corpus
 
-The intended v1 public suite uses every applicable instance from these pinned
-sources:
+The intended v1 public suite uses every applicable passenger DARP instance from
+these pinned sources:
 
-1. [Eccel et al. DDARP/DPDPTW v1.2](https://doi.org/10.5281/zenodo.4107192)
-   for the small tier; and
+1. [Eccel et al. DDARP v1.2](https://doi.org/10.5281/zenodo.4107192)
+   for the small tier;
 2. [NYC-DARP v1.0](https://doi.org/10.5281/zenodo.20452171), distributed with
-   [dynamic-ips](https://github.com/lab-core/dynamic-ips), for the large tier.
+   [dynamic-ips](https://github.com/lab-core/dynamic-ips), for the large tier;
+   and
+3. [Ontra Manhattan TLC 2025-01-22](https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/tag/ontra-manhattan-tlc-2025-01-22-v1.0.0-draft.1),
+   a new public large-instance family derived from NYC TLC records.
 
 The draft conversions currently cover all 68 Eccel DDARP request/reveal pairs and
-all 96 NYC-DARP demand windows with all 62 compatible fleet deployments. DPDPTW
-instances will remain a separately labeled adjacent task; they will not be
-silently mixed into DARP scorecards. See
+all 96 NYC-DARP demand windows with all 62 compatible fleet deployments. The
+Ontra collection adds one 24,325-request Manhattan demand window with three
+official balanced fleet deployments; its exact historical Rust-regression fleet
+is available as a clearly labeled supplemental deployment. Its complete road
+matrix uses pinned GraphHopper `car` routing with a 1.4 time multiplier and no
+Haversine fallback. See
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for attribution and import
 status.
 
@@ -97,8 +103,16 @@ To generate and validate normalized collections:
 odb-convert-eccel /path/to/instances-DDARP-DPDPTW /data/eccel-ddarp-v1.2
 odb-fetch-nyc /data/nyc-source
 odb-convert-nyc /data/nyc-source/NYC_Dataset_2015-2016 /data/nyc-darp-v1.0
+odb-convert-ontra-manhattan \
+  /data/ontra-manhattan-source /data/ontra-manhattan-tlc-2025-01-22-v1 \
+  --converter-version 9f28842d0a87e88d0b33da061e26a7911eccc342 \
+  --graphhopper-url http://localhost:8991 \
+  --osm-pbf-sha256 6769faafd0f994abc45d2b7fe3a3f86520d41b33f0d9ee0350b95d800976e245 \
+  --graphhopper-build sha256:acff212715b0fc13b970da5837d51414e7ed1f9464b6cc35c0c3eb2dcb4228b1 \
+  --graphhopper-config-sha256 ba5138c4beff955a84172d773dbd1b7a0edb3683258653aae1c0ac5537bb4f68
 odb-validate-collection /data/eccel-ddarp-v1.2
 odb-validate-collection /data/nyc-darp-v1.0
+odb-validate-collection /data/ontra-manhattan-tlc-2025-01-22-v1
 ```
 
 See [DATA_STORAGE.md](DATA_STORAGE.md) for the Zenodo, GitHub Release, and future
@@ -112,8 +126,9 @@ Start with [CONTRIBUTING.md](CONTRIBUTING.md) and use the matching pull-request
 template. Changes to benchmark semantics follow the process in
 [GOVERNANCE.md](GOVERNANCE.md).
 
-Active design proposal: [RFC-0001, Parquet Instance Package
-Format](proposals/0001-parquet-instance-format.md).
+Active design proposals include [RFC-0001, Parquet Instance Package
+Format](proposals/0001-parquet-instance-format.md), and [RFC-0004, Ontra
+Manhattan TLC public instances](proposals/0004-ontra-manhattan-tlc-public-instances.md).
 
 ## License and citation
 

@@ -3,12 +3,13 @@
 ## 0.1 — Public scaffold
 
 - Publish benchmark contract, governance, schemas, examples, validator, and site.
-- Register the complete intended Eccel v1.2 and NYC-DARP v1.0 sources.
+- Register the complete intended Eccel v1.2, NYC-DARP v1.0, and Ontra Manhattan
+  TLC public sources.
 - Accept provisional instance and result submissions.
 
 ## 0.2 — Reproducible public corpus
 
-- Complete redistribution and privacy review for both source releases.
+- Complete redistribution and privacy review for every source release.
 - Import or pin every applicable source artifact with checksums.
 - Publish deterministic normalization and reveal-schedule transformations.
 - Add a small synthetic smoke suite and reference evaluator.
@@ -32,4 +33,3 @@
 - Publish evaluator access, compute, submission, retention, leakage, and incident
   policies before accepting hidden submissions.
 - Construct held-out instances and keep public training data separate.
-

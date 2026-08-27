@@ -55,3 +55,17 @@ def test_parquet_collection_resolves_instance_components() -> None:
         for file_record in artifact["files"]:
             assert len(file_record["sha256"]) == 64
             assert file_record["row_count"] > 0
+
+
+def test_published_collection_registry_has_immutable_checksums() -> None:
+    registry = yaml.safe_load(
+        (ROOT / "manifests" / "collections.yaml").read_text(encoding="utf-8")
+    )
+    assert registry["release"]["target_commit"] == (
+        "2c1633f9e8cae88af3ef25e00c60cfc2514dd576"
+    )
+    for collection in registry["collections"]:
+        archive = collection["archive"]
+        assert len(archive["sha256"]) == 64
+        assert archive["byte_size"] > 0
+        assert archive["mirror_url"].startswith("https://")

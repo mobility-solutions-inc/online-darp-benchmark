@@ -102,7 +102,8 @@ odb-validate-collection /data/nyc-darp-v1.0
 ```
 
 See [DATA_STORAGE.md](DATA_STORAGE.md) for the Zenodo, GitHub Release, and future
-hidden-instance storage policy.
+hidden-instance storage policy. Draft downloads and exact archive checksums are
+listed in [manifests/collections.yaml](manifests/collections.yaml).
 
 ## Contribute
 

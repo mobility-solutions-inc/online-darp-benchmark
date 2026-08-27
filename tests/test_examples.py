@@ -25,6 +25,8 @@ def test_example_instance_is_valid() -> None:
 def test_example_result_is_valid() -> None:
     document = validate_manifest(ROOT / "examples/result.yaml", "result")
     assert document["metrics"]["service"]["request_service_rate"] == 0.5
+    assert document["algorithm"]["code_available_publicly"] is True
+    assert document["algorithm"]["public_code_url"].startswith("https://")
 
 
 def test_synthetic_hidden_submission_is_valid() -> None:
@@ -65,6 +67,24 @@ def test_example_event_log_is_valid() -> None:
 def test_result_contract_rejects_an_aggregate_score() -> None:
     document = deepcopy(load_document(ROOT / "examples/result.yaml"))
     document["metrics"]["overall_score"] = 0.99
+    validator = Draft202012Validator(
+        load_schema("result"), format_checker=FormatChecker()
+    )
+    assert list(validator.iter_errors(document))
+
+
+def test_public_code_requires_a_link() -> None:
+    document = deepcopy(load_document(ROOT / "examples/result.yaml"))
+    document["algorithm"]["public_code_url"] = None
+    validator = Draft202012Validator(
+        load_schema("result"), format_checker=FormatChecker()
+    )
+    assert list(validator.iter_errors(document))
+
+
+def test_nonpublic_code_rejects_a_public_link() -> None:
+    document = deepcopy(load_document(ROOT / "examples/result.yaml"))
+    document["algorithm"]["code_available_publicly"] = False
     validator = Draft202012Validator(
         load_schema("result"), format_checker=FormatChecker()
     )

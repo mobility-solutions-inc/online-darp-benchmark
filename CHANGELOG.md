@@ -6,6 +6,8 @@ All notable benchmark and tooling changes are recorded here.
 
 ### Added
 
+- Required result fields for public-code availability and a validated direct
+  source link when code is available.
 - Proposed confidential hidden-instance intake, isolated staging, access-ledger,
   and public opaque-registry contracts.
 - Result standing classifications for official, contributor-reference, and

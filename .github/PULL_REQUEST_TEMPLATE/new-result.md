@@ -14,6 +14,7 @@ Instance visibility (`public` or `hidden`):
 
 - [ ] Result manifest and event log validate.
 - [ ] Algorithm source/container is immutable and license is stated.
+- [ ] Public code availability is declared, with a direct link when available.
 - [ ] Algorithm authors, controllers, tuners, and configurators are identified.
 - [ ] Exact invocation, parameters, seed set, hardware, time, and memory limits are recorded.
 - [ ] Internal objective and hard/soft constraints are disclosed.

@@ -39,6 +39,11 @@ exact invocation, fixed seeds, hardware, and disclosures for the internal
 objective, prediction data, tuning, and relocation. Missing, failed, and
 unsupported configurations remain part of the record.
 
+Declare whether the evaluated code is publicly available. If it is, include a
+direct `public_code_url`, preferably pinned to the evaluated commit; otherwise
+use `null`. The scorecard exposes this disclosure without treating closed source
+as an automatic standing failure.
+
 Results are labeled `official`, `contributor_reference`, or `unofficial`. A
 hidden-instance contributor may submit a reference result, but it is never
 official and does not establish an official rank or record. Official hidden

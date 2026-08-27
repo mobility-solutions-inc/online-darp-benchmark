@@ -1,4 +1,4 @@
-schema_version: 0.2.0
+schema_version: 0.3.0
 result_id: synthetic-greedy.smoke.h0.seed7
 benchmark_version: 0.1.0
 instance_id: synthetic.smoke.001
@@ -24,6 +24,8 @@ algorithm:
       github: null
       roles:
         - author
+  code_available_publicly: true
+  public_code_url: https://github.com/mobility-solutions-inc/online-darp-benchmark/tree/4fdd704f408773670597a9611dd978578caf245b
   artifact_url: https://github.com/mobility-solutions-inc/online-darp-benchmark
   artifact_digest: example-only
   internal_objective: Accept a revealed request if the single vehicle has capacity.

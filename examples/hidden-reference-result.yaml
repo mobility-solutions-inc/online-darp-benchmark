@@ -1,4 +1,4 @@
-schema_version: 0.2.0
+schema_version: 0.3.0
 result_id: synthetic-hidden.reference.h0.seed7
 benchmark_version: 0.1.0
 instance_id: hidden.synthetic.001.case-a
@@ -26,6 +26,8 @@ algorithm:
       roles:
         - author
         - controller
+  code_available_publicly: false
+  public_code_url: null
   artifact_url: https://example.invalid/synthetic-hidden-reference
   artifact_digest: example-only
   internal_objective: Serve as many revealed requests as possible.

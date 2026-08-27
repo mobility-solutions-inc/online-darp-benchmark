@@ -137,6 +137,17 @@ other movement. Empty distance and time are always reported separately.
 No composite score is official. The machine-readable result schema records the
 following groups individually.
 
+### Algorithm availability
+
+- whether the evaluated algorithm's code is publicly available; and
+- a direct public code link when it is available, preferably pinned to the
+  evaluated version or commit.
+
+The scorecard renders the availability value as a linked “Yes” when a public
+URL is supplied and as “No” otherwise. Public code is encouraged but is not a
+condition of official standing; the disclosure allows readers to distinguish
+open implementations from reproducible immutable artifacts that are not public.
+
 ### Service
 
 - requests and passengers offered, served, rejected, and abandoned;
@@ -203,9 +214,9 @@ Statistical summaries do not replace raw run records.
 ## Reproducibility record
 
 Each result identifies the exact benchmark version, instance checksum, algorithm
-version or commit, container digest where available, parameters, random seed,
-hardware, operating system, time limit, and memory limit. The event log is the
-source of truth for metric recomputation.
+version or commit, public-code availability and link, container digest where
+available, parameters, random seed, hardware, operating system, time limit, and
+memory limit. The event log is the source of truth for metric recomputation.
 
 ## Versioning and comparability
 

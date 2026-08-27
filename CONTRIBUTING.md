@@ -118,6 +118,13 @@ prediction/training data, relocation policy, tuning, and hardware. Submit every
 required instance/lookahead/seed combination or explicitly
 list missing combinations with a run status and reason.
 
+Every result must declare `code_available_publicly`. When it is `true`, provide
+`public_code_url` as a public link to the code that produced the result,
+preferably pinned to the exact commit reported by `version` and
+`artifact_digest`. When it is `false`, `public_code_url` must be `null`. Code
+availability is displayed in the scorecard but does not by itself determine a
+result's standing.
+
 Every result declares its standing:
 
 - `official` means it passed the released protocol and eligibility review;

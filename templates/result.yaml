@@ -1,6 +1,6 @@
 # Start from examples/result.yaml and replace every value below. Do not delete
 # failed or unsupported runs; use run_status and failure_reason.
-schema_version: 0.2.0
+schema_version: 0.3.0
 result_id: <algorithm.instance.lookahead.seed>
 benchmark_version: <semantic-version>
 instance_id: <instance-id>
@@ -27,6 +27,9 @@ algorithm:
       github: <github-handle-or-null>
       roles:
         - <author-controller-tuner-or-configurator>
+  # Link to the evaluated source, preferably an immutable commit, when public.
+  code_available_publicly: <true-or-false>
+  public_code_url: <public-code-url-or-null>
   artifact_url: <immutable-source-or-container-url>
   artifact_digest: <commit-or-container-digest>
   internal_objective: <objective-or-reward-description>

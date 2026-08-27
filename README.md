@@ -59,6 +59,7 @@ Each completed run reports individual values rather than an aggregate rank:
 | Stability | reassignments, promise changes, post-acceptance rejections |
 | Computation | decision latency, timeout count, wall time, memory |
 | Feasibility | capacity, time-window, ride-time, and route violations |
+| Reproducibility | public-code availability/link, algorithm artifact, solver and environment disclosures |
 
 The full metric definitions and execution rules live in
 [BENCHMARK_CARD.md](BENCHMARK_CARD.md).

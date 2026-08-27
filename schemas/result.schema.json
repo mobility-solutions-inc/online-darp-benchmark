@@ -17,7 +17,7 @@
     "artifacts"
   ],
   "properties": {
-    "schema_version": {"const": "0.2.0"},
+    "schema_version": {"const": "0.3.0"},
     "result_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,191}$"},
     "benchmark_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
     "instance_id": {"type": "string", "minLength": 1},
@@ -77,6 +77,8 @@
         "name",
         "version",
         "team",
+        "code_available_publicly",
+        "public_code_url",
         "artifact_url",
         "artifact_digest",
         "internal_objective",
@@ -105,6 +107,15 @@
               }
             }
           }
+        },
+        "code_available_publicly": {
+          "type": "boolean",
+          "description": "Whether the evaluated algorithm's source code is publicly accessible."
+        },
+        "public_code_url": {
+          "type": ["string", "null"],
+          "format": "uri",
+          "description": "Public link to the evaluated source code, preferably pinned to the reported version or commit; required when code_available_publicly is true and null otherwise."
         },
         "artifact_url": {"type": "string", "format": "uri"},
         "artifact_digest": {"type": "string", "minLength": 1},
@@ -290,6 +301,33 @@
     "notes": {"type": ["string", "null"]}
   },
   "allOf": [
+    {
+      "if": {
+        "required": ["algorithm"],
+        "properties": {
+          "algorithm": {
+            "required": ["code_available_publicly"],
+            "properties": {"code_available_publicly": {"const": true}}
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "algorithm": {
+            "properties": {
+              "public_code_url": {"type": "string", "format": "uri"}
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "algorithm": {
+            "properties": {"public_code_url": {"type": "null"}}
+          }
+        }
+      }
+    },
     {
       "if": {
         "required": ["standing"],

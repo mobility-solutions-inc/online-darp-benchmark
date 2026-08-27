@@ -38,6 +38,7 @@ TRAVEL_TIME_MULTIPLIER_NUMERATOR = 7
 TRAVEL_TIME_MULTIPLIER_DENOMINATOR = 5
 GRAPHHOPPER_PROFILE = "car"
 GRAPHHOPPER_COMMIT = "80ed17c5fa3f71175949ee0ad44732391172e03a"
+GRAPHHOPPER_INDEX_HIGH_RESOLUTION_METERS = 1000
 GRAPHHOPPER_MAX_REGION_SEARCH = 8
 OSM_PARENT_SOURCE_URL = (
     "https://download.geofabrik.de/north-america/us-northeast-latest.osm.pbf"
@@ -456,6 +457,9 @@ def _write_travel_matrix(
             "graphhopper_build": graphhopper_build,
             "graphhopper_source_commit": GRAPHHOPPER_COMMIT,
             "graphhopper_config_sha256": graphhopper_config_sha256,
+            "graphhopper_index_high_resolution_m": (
+                GRAPHHOPPER_INDEX_HIGH_RESOLUTION_METERS
+            ),
             "graphhopper_index_max_region_search": GRAPHHOPPER_MAX_REGION_SEARCH,
             "graphhopper_server_info": graphhopper_info,
             "osm_parent_source_url": OSM_PARENT_SOURCE_URL,
@@ -831,6 +835,9 @@ def convert(
                 "graphhopper_build": graphhopper_build,
                 "graphhopper_source_commit": GRAPHHOPPER_COMMIT,
                 "graphhopper_config_sha256": graphhopper_config_sha256,
+                "graphhopper_index_high_resolution_m": (
+                    GRAPHHOPPER_INDEX_HIGH_RESOLUTION_METERS
+                ),
                 "graphhopper_index_max_region_search": GRAPHHOPPER_MAX_REGION_SEARCH,
                 "osm_parent_source_url": OSM_PARENT_SOURCE_URL,
                 "osm_parent_sha256": OSM_PARENT_SHA256,

@@ -39,9 +39,13 @@ OpenStreetMap and OSRM. Every upstream notice must survive normalization.
 
 | Source | Suite role | Redistribution status |
 |---|---|---|
-| Eccel v1.2 | Small | Awaiting confirmation of dataset-specific terms |
-| NYC-DARP v1.0 | Large | Awaiting an explicit dataset license |
+| Eccel v1.2 | Small | Confirmed; DDARP release pinned and normalized |
+| NYC-DARP v1.0 | Large | Confirmed CC BY 4.0; archive and warm-start commit pinned |
+
+Complete Parquet packages are published outside Git under the project's
+[data-storage policy](data.html). The Eccel collection contains all 68 paired
+DDARP instances. The NYC collection contains all 96 demand windows, all 62
+compatible fleet deployments, and explicit onboard state for warm-start fleets.
 
 The [complete notice and import gate](https://github.com/mobility-solutions-inc/online-darp-benchmark/blob/main/THIRD_PARTY_NOTICES.md)
 is authoritative.
-

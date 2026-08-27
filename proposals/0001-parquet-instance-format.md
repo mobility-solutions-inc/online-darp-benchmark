@@ -11,13 +11,16 @@
 Normalized benchmark instances should use Apache Parquet for tabular data and a
 small YAML control plane for composition, provenance, licensing, and integrity.
 An instance is not one monolithic file. It is a manifest-defined combination of
-five reusable components:
+five required reusable components and one optional initial-state component:
 
 1. physical requests;
 2. a request reveal schedule;
 3. a fleet deployment;
 4. nodes; and
 5. static directed travel times.
+
+An optional `onboard_requests` table represents passengers already in vehicles
+at simulation start. It is required whenever a fleet has a nonzero initial load.
 
 Separating physical requests from reveal times is central to the design. Many
 online information scenarios can share exactly the same offline physical problem,
@@ -99,7 +102,9 @@ collections/<source-id>/<source-release>/
 │   │   └── part-00001.parquet
 │   ├── demand/<demand-id>/requests.parquet
 │   ├── demand/<demand-id>/reveals/<reveal-schedule-id>.parquet
-│   └── fleets/<fleet-id>/vehicles.parquet
+│   └── fleets/<fleet-id>/
+│       ├── vehicles.parquet
+│       └── onboard-requests.parquet   # optional warm-start state
 └── instances/
     ├── <instance-id>.yaml
     └── ...
@@ -177,14 +182,18 @@ relocation:
 ```
 
 `physical_problem_id` and `physical_problem_sha256` exclude only the reveal
-schedule. They include requests, fleet, nodes, travel times, service horizon, and
-relocation semantics. Therefore, changing `reveal_times` alone MUST leave both
+schedule. They include requests, fleet, optional onboard state, nodes, travel
+times, service horizon, and relocation semantics. Therefore, changing
+`reveal_times` alone MUST leave both
 physical-problem fields unchanged. Offline references key to the physical problem,
 not the online reveal schedule.
 
-The reference tooling will define the fingerprint byte construction before this
-RFC is accepted. It will use only versioned component file digests and integer or
-enumerated physical settings, avoiding writer-dependent logical reserialization.
+The draft reference tooling constructs the fingerprint as SHA-256 over canonical
+UTF-8 JSON: keys sorted, no insignificant whitespace, and no non-finite numbers.
+The object contains `format_version`; file-digest lists for `requests`,
+`vehicles`, `nodes`, `travel_times`, and optional `onboard_requests`;
+`service_horizon_ms`; and the relocation fields. It deliberately avoids
+writer-dependent logical reserialization.
 
 ## Common table contract
 
@@ -287,11 +296,39 @@ One row represents one vehicle at the start of the simulation.
 | `end_node_index` | `int32` | Yes | Required terminal node; null means unrestricted |
 | `shift_start_time_ms` | `int64` | No | Vehicle becomes available |
 | `shift_end_time_ms` | `int64` | No | Must be at terminal, if any, by this time |
+| `max_route_duration_ms` | `int64` | Yes | Positive maximum elapsed route duration; null means none |
 | `seat_capacity` | `int32` | No | At least 1 |
-| `initial_load` | `int32` | No | MUST be 0 in format v1 |
+| `initial_load` | `int32` | No | Nonnegative and no greater than capacity |
 
-Format v1 assumes vehicles begin empty. A future state-snapshot profile may add an
-onboard-passenger table rather than making initial state implicit.
+`initial_load` MUST equal the total `party_size` assigned to the vehicle in the
+optional `onboard_requests` component. If the component is absent, all initial
+loads MUST be zero.
+
+### `onboard_requests` — optional warm-start state
+
+This component is present only when passengers have already been picked up at
+simulation start. It makes the initial condition explicit rather than hiding it
+inside algorithm state.
+
+| Column | Arrow type | Null? | Constraint/meaning |
+|---|---|---:|---|
+| `onboard_request_index` | `int32` | No | Primary key, contiguous `0..B-1` |
+| `onboard_request_id` | `string` | No | Unique stable normalized ID |
+| `source_request_id` | `string` | Yes | Original source identifier |
+| `party_size` | `int32` | No | At least 1 |
+| `pickup_node_index` | `int32` | No | Completed pickup location |
+| `dropoff_node_index` | `int32` | No | Pending drop-off location |
+| `earliest_pickup_time_ms` | `int64` | No | Original physical availability |
+| `pickup_time_ms` | `int64` | No | Realized pickup time |
+| `pickup_departure_time_ms` | `int64` | No | Realized pickup departure time |
+| `assigned_vehicle_index` | `int32` | No | Vehicle carrying this party |
+| `dropoff_route_position` | `int32` | No | Source warm-start route position, at least 1 |
+| `max_ride_time_ms` | `int64` | Yes | Positive bound when imposed by the instance |
+| `dropoff_service_time_ms` | `int64` | No | Nonnegative |
+
+Times may be negative because the pickup can precede service start. A source may
+also schedule a warm-start departure just after the nominal start; converters
+preserve that state and report it rather than shifting times.
 
 ### `nodes` — service and relocation locations
 
@@ -434,6 +471,7 @@ The reference validator reports four independent levels.
 
 - Time windows are ordered and service durations are nonnegative.
 - Vehicle shifts and capacities are valid.
+- Warm-start vehicle loads equal their onboard passenger rows.
 - Matrix diagonals are zero and values are nonnegative.
 - Every request is individually physically serviceable, or is explicitly marked
   as an intended infeasible/adversarial case by a registered variant.
@@ -467,33 +505,40 @@ results stay interpretable.
   `reveal_times` table.
 - Instance coordinates become the abstract Cartesian node profile unless a
   source-specific CRS is documented.
-- The source travel matrix becomes the long-form matrix.
+- The source's `ceil(EuclideanDistance)` travel-time rule is deterministically
+  expanded into the complete long-form matrix.
 - Additional reveal generators create small new reveal tables, not duplicate
   physical request tables.
 
 ### NYC-DARP v1.0
 
 - Each solver-ready service window becomes one physical demand artifact.
+- Source rows with nonpositive `passenger_count` are excluded and counted in
+  provenance because they are not valid passenger requests; values are never
+  silently coerced.
 - Original request timestamps map to a reveal schedule after the source time
   origin and timezone are explicitly recorded.
 - Virtual stops use GeoParquet Point WKB with the documented CRS.
-- The shared edge-time matrix becomes one sharded long-form matrix.
+- The shared edge-time matrix becomes one reusable long-form matrix.
 - Vehicle deployment files become reusable fleet artifacts. Logical instances
   reference demand, fleet, and network components without copying them.
+- Warm-start fleet files and their onboard passengers use the optional initial
+  state component; 7:00 demand windows use compatible uniform fleets and 11:00
+  windows use compatible warm-start fleets.
 
-Neither conversion proceeds until the applicable redistribution terms and
-upstream notices pass the repository's import gate.
+Redistribution has been confirmed for both pinned releases. Normalized archives
+retain dataset, NYC TLC, OpenStreetMap, OSRM, and software notices alongside the
+source and normalized checksums.
 
 ## Adoption plan
 
 1. Review this RFC for at least the governance minimum.
-2. Convert one Eccel instance and one small NYC window as non-official fixtures.
-3. Measure matrix size, read latency, memory conversion, and ZSTD/shard behavior.
-4. Validate the same fixtures with PyArrow and a Rust Parquet/Arrow reader.
-5. Finalize the physical-problem fingerprint and manifest JSON Schema.
-6. Implement package/table/semantic validation.
-7. Convert the complete pinned public sources and publish a conversion report.
-8. Accept the format before official reference solutions or scorecards are
+2. Review the complete Eccel DDARP and NYC-DARP draft conversions and reports.
+3. Measure matrix read latency, memory conversion, and cross-language behavior.
+4. Validate representative fixtures with a Rust Parquet/Arrow reader.
+5. Finalize the collection and instance manifest JSON Schemas.
+6. Publish immutable normalized collection archives and checksums.
+7. Accept the format before official reference solutions or scorecards are
    released.
 
 ## Open decisions
@@ -505,7 +550,6 @@ upstream notices pass the repository's import gate.
    distances or remain nullable.
 5. Register multidimensional capacity/accessibility tables in core v1 or the first
    minor extension.
-6. Set the exact component and physical-problem fingerprint byte construction.
 
 ## References
 

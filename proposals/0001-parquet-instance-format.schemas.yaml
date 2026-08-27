@@ -56,8 +56,30 @@ tables:
       - {name: end_node_index, type: int32, nullable: true, foreign_key: nodes.node_index}
       - {name: shift_start_time_ms, type: int64, nullable: false}
       - {name: shift_end_time_ms, type: int64, nullable: false}
+      - {name: max_route_duration_ms, type: int64, nullable: true, exclusive_minimum: 0}
       - {name: seat_capacity, type: int32, nullable: false, minimum: 1}
-      - {name: initial_load, type: int32, nullable: false, const: 0}
+      - {name: initial_load, type: int32, nullable: false, minimum: 0}
+  onboard_requests:
+    schema_version: 1.0.0-draft.1
+    primary_key:
+      - onboard_request_index
+    sort_keys:
+      - onboard_request_index
+    optional_component: true
+    fields:
+      - {name: onboard_request_index, type: int32, nullable: false, constraints: [contiguous_zero_based]}
+      - {name: onboard_request_id, type: string, nullable: false, constraints: [unique, nonempty, nfc]}
+      - {name: source_request_id, type: string, nullable: true}
+      - {name: party_size, type: int32, nullable: false, minimum: 1}
+      - {name: pickup_node_index, type: int32, nullable: false, foreign_key: nodes.node_index}
+      - {name: dropoff_node_index, type: int32, nullable: false, foreign_key: nodes.node_index}
+      - {name: earliest_pickup_time_ms, type: int64, nullable: false}
+      - {name: pickup_time_ms, type: int64, nullable: false}
+      - {name: pickup_departure_time_ms, type: int64, nullable: false}
+      - {name: assigned_vehicle_index, type: int32, nullable: false, foreign_key: vehicles.vehicle_index}
+      - {name: dropoff_route_position, type: int32, nullable: false, minimum: 1}
+      - {name: max_ride_time_ms, type: int64, nullable: true, exclusive_minimum: 0}
+      - {name: dropoff_service_time_ms, type: int64, nullable: false, minimum: 0}
   nodes:
     schema_version: 1.0.0-draft.1
     primary_key:
@@ -105,4 +127,3 @@ writer_profile:
   store_arrow_schema: true
   compliant_nested_types: true
   maximum_rows_per_row_group: 1048576
-

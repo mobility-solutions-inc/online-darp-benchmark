@@ -17,6 +17,7 @@ def test_parquet_proposal_defines_every_core_table() -> None:
         "requests",
         "reveal_times",
         "vehicles",
+        "onboard_requests",
         "nodes",
         "travel_times",
     }

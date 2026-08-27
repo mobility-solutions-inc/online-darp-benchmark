@@ -1,9 +1,10 @@
 # Third-Party Notices and Data Provenance
 
-The initial v0.1 repository contains benchmark-owned code, schemas,
-documentation, and synthetic examples. **It does not redistribute the source
-datasets listed below.** Links and citations are provided because the benchmark
-design is based on them and the intended public suite will derive from them.
+The Git repository contains benchmark-owned code, schemas, documentation,
+registries, and synthetic examples. Bulk normalized data is distributed as
+immutable external collection archives rather than through Git or Git LFS.
+Source archives remain at their canonical records unless a collection notice
+explicitly says otherwise.
 
 The repository's MIT license applies only to benchmark-owned material. It does
 not override a dataset, article, road network, or upstream software license.
@@ -22,13 +23,13 @@ not override a dataset, article, road network, or upstream software license.
   Dynamic Dial-a-Ride Problem,” *INFORMS Journal on Computing* 24(3), 343–355
   (2012). <https://doi.org/10.1287/ijoc.1110.0454>
 
-The source code repository declares the MIT license. The Zenodo record labels
-the dataset “Other (Open)” without a sufficiently specific redistribution grant.
-The methods article is CC BY 4.0. Before importing data, maintainers must confirm
-the dataset files' applicable terms, preserve the original notices, pin the exact
-release, and record SHA-256 checksums. The original Cordeau, Ropke, and other
-instance-family citations carried by the release must be transcribed into the
-per-instance provenance records.
+Redistribution has been confirmed. The source repository declares the MIT
+license and the normalized collection preserves its notice. The imported DDARP
+release is pinned to commit
+`77c301eab45f735734f114fdfefd4da02f19c8b1`; all 68 static/dynamic DDARP pairs
+carry file-level source checksums and transitive citations. DPDPTW remains a
+separately labeled adjacent task and needs a fleet/capacity format extension
+before normalization.
 
 ## NYC-DARP and dynamic-ips
 
@@ -38,11 +39,13 @@ per-instance provenance records.
 - Software: Laboratory for Combinatorial Optimization in Real-time Environment,
   *dynamic-ips*. <https://github.com/lab-core/dynamic-ips>
 
-The dynamic-ips repository declares the MIT license. At the time this notice was
-written, the Zenodo dataset record did not state a license. It describes derived
-NYC Taxi and Limousine Commission trip records, OpenStreetMap road data, and OSRM
-travel times. Redistribution therefore remains blocked pending confirmation of
-the dataset terms and preservation of all upstream notices, including:
+The NYC-DARP v1.0 Zenodo record declares CC BY 4.0 and redistribution has been
+confirmed. The source archive is pinned by SHA-256
+`2e52d138260951d29b4a0b084a86a7122a24cfe40c357a7252739add51db2401`.
+Warm-start vehicle and onboard files referenced by the dataset software are
+absent from that ZIP, so those files are separately pinned to dynamic-ips commit
+`c7ba9948501f58babf4d8112e00f821a5b8185b6`, whose software license is MIT.
+The normalized collection preserves the following upstream notices:
 
 - [NYC TLC Trip Record Data](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page);
 - [OpenStreetMap copyright and license](https://www.openstreetmap.org/copyright);
@@ -50,7 +53,9 @@ the dataset terms and preservation of all upstream notices, including:
 - [OSRM](https://github.com/Project-OSRM/osrm-backend).
 
 The initial suite includes NYC-DARP only. Other collections present in
-dynamic-ips, including Riley_Benchmark, are not implicitly part of v1.
+dynamic-ips, including Riley_Benchmark, are not implicitly part of v1. The
+normalizer records the deterministic exclusion of 23 source rows with
+nonpositive passenger counts; it does not silently coerce them into requests.
 
 ## Reference implementations and values
 
@@ -69,4 +74,3 @@ No third-party source enters an official suite until a pull request records:
 4. source and normalized-file SHA-256 checksums;
 5. deterministic transformation code and lineage; and
 6. privacy and sensitive-data review.
-

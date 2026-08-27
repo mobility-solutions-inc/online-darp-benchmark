@@ -15,11 +15,12 @@ sources:
     repository_url: https://github.com/renan-eccel/instances-DDARP-DPDPTW
     inclusion_rule: all_applicable_instances
     pin:
-      status: pending_import_audit
-      commit: null
+      status: confirmed
+      commit: 77c301eab45f735734f114fdfefd4da02f19c8b1
     redistribution:
-      status: blocked_pending_license_confirmation
-      note: Zenodo describes the license as Other (Open) without specific terms.
+      status: confirmed
+      license: MIT
+      note: Redistribution confirmed; retain the upstream license and citations.
     citations:
       - https://doi.org/10.5281/zenodo.4107192
       - https://doi.org/10.14295/transportes.v28i4.2412
@@ -37,15 +38,21 @@ sources:
     repository_url: https://github.com/lab-core/dynamic-ips
     inclusion_rule: all_request_instances_and_vehicle_deployments
     pin:
-      status: pending_import_audit
-      commit: null
+      status: confirmed
+      zenodo_record: 20452171
+      archive_filename: NYC_Dataset_2015-2016.zip
+      archive_md5: 011d40f85e2f22e0b55e101383fbac2c
+      archive_sha256: 2e52d138260951d29b4a0b084a86a7122a24cfe40c357a7252739add51db2401
+      dynamic_ips_commit: c7ba9948501f58babf4d8112e00f821a5b8185b6
     redistribution:
-      status: blocked_pending_license_confirmation
-      note: The Zenodo record does not currently state a dataset license.
+      status: confirmed
+      license: CC-BY-4.0
+      note: >-
+        Zenodo v1.0 supplies the main archive; warm-start fleet files are pinned
+        to the dynamic-ips commit because they are absent from the archive.
     citations:
       - https://doi.org/10.5281/zenodo.20452171
       - https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page
       - https://www.openstreetmap.org/copyright
       - https://github.com/Project-OSRM/osrm-backend
     notes: Riley_Benchmark is outside the initial two-source suite.
-

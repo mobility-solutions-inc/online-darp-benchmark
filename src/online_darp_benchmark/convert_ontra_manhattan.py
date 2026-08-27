@@ -40,10 +40,11 @@ GRAPHHOPPER_PROFILE = "car"
 GRAPHHOPPER_COMMIT = "80ed17c5fa3f71175949ee0ad44732391172e03a"
 GRAPHHOPPER_MAX_REGION_SEARCH = 8
 OSM_PARENT_SOURCE_URL = (
-    "https://download.geofabrik.de/north-america/us-northeast-260801.osm.pbf"
+    "https://download.geofabrik.de/north-america/us-northeast-latest.osm.pbf"
 )
-OSM_PARENT_SHA256 = "743e3935f485526eeec052088efc5e3934437c85c97917371a2dbe7ed12a5bb1"
-OSM_CROP_FILENAME = "nyc-routing-260801.osm.pbf"
+OSM_PARENT_SHA256 = "b6e1e3a7865aa2462cc624e267e67e290106b445b6f34e07d7cfb2060e5e543e"
+OSM_PARENT_REPLICATION_TIMESTAMP = "2026-08-05T20:21:23Z"
+OSM_CROP_FILENAME = "nyc-routing-20260805.osm.pbf"
 OSM_CROP_BBOX = [-74.35, 40.45, -73.65, 41.0]
 OSM_CROP_STRATEGY = "complete_ways"
 OSMIUM_VERSION = "1.15.0"
@@ -88,7 +89,7 @@ CITATIONS_BIB = """@misc{nyctlc2025triprecords,
 
 @misc{geofabrik2026northeast,
   author = {{Geofabrik GmbH and OpenStreetMap contributors}},
-  title = {US Northeast OpenStreetMap extract, 2026-08-01},
+  title = {US Northeast OpenStreetMap snapshot, 2026-08-05},
   year = {2026},
   url = {https://download.geofabrik.de/north-america/us-northeast.html}
 }
@@ -459,6 +460,7 @@ def _write_travel_matrix(
             "graphhopper_server_info": graphhopper_info,
             "osm_parent_source_url": OSM_PARENT_SOURCE_URL,
             "osm_parent_sha256": OSM_PARENT_SHA256,
+            "osm_parent_replication_timestamp": OSM_PARENT_REPLICATION_TIMESTAMP,
             "osm_crop_filename": OSM_CROP_FILENAME,
             "osm_crop_sha256": osm_pbf_sha256,
             "osm_crop_bbox_wgs84": OSM_CROP_BBOX,
@@ -806,7 +808,7 @@ def convert(
     source_checksums = {
         **{name: sha256_file(source / name) for name in PINNED_SOURCE_SHA256},
         **{f"upstream/{name}": digest for name, digest in UPSTREAM_TLC_SHA256.items()},
-        "upstream/us-northeast-260801.osm.pbf": OSM_PARENT_SHA256,
+        "upstream/us-northeast-20260805.osm.pbf": OSM_PARENT_SHA256,
         f"derived/{OSM_CROP_FILENAME}": osm_pbf_sha256,
     }
     (provenance_root / "source-checksums.sha256").write_text(
@@ -832,6 +834,7 @@ def convert(
                 "graphhopper_index_max_region_search": GRAPHHOPPER_MAX_REGION_SEARCH,
                 "osm_parent_source_url": OSM_PARENT_SOURCE_URL,
                 "osm_parent_sha256": OSM_PARENT_SHA256,
+                "osm_parent_replication_timestamp": OSM_PARENT_REPLICATION_TIMESTAMP,
                 "osm_crop_filename": OSM_CROP_FILENAME,
                 "osm_crop_sha256": osm_pbf_sha256,
                 "osm_crop_bbox_wgs84": OSM_CROP_BBOX,

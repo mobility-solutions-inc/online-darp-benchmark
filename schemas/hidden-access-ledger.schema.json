@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mobility-solutions-inc.github.io/online-darp-benchmark/schemas/hidden-access-ledger.schema.json",
+  "title": "Confidential hidden-instance access ledger",
+  "description": "Append-only confidential record. Revocation does not erase prior access.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "submission_id", "entries"],
+  "properties": {
+    "schema_version": {"const": "0.1.0"},
+    "submission_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,191}$"},
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "accessor_id",
+          "name",
+          "affiliation",
+          "role",
+          "scope",
+          "granted_at",
+          "revoked_at",
+          "approved_by",
+          "algorithm_teams",
+          "reason",
+          "affected_result_ids",
+          "incident_notes"
+        ],
+        "properties": {
+          "accessor_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,191}$"},
+          "name": {"type": "string", "minLength": 1},
+          "affiliation": {"type": ["string", "null"]},
+          "role": {"enum": ["contributor", "reviewer", "evaluation_operator", "infrastructure_admin", "incident_responder"]},
+          "scope": {"type": "string", "minLength": 1},
+          "granted_at": {"type": "string", "format": "date-time"},
+          "revoked_at": {"type": ["string", "null"], "format": "date-time"},
+          "approved_by": {"type": "string", "minLength": 1},
+          "algorithm_teams": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+          "reason": {"type": "string", "minLength": 1},
+          "affected_result_ids": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+          "incident_notes": {"type": ["string", "null"]}
+        }
+      }
+    }
+  }
+}

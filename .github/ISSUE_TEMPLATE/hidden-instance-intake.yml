@@ -1,0 +1,53 @@
+name: Hidden instance intake request
+description: Request an isolated private channel without disclosing instance details.
+title: "Hidden instance intake: "
+labels:
+  - hidden-instance-intake
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This issue is public. Do **not** include instance geography, dates, request
+        counts, filenames, samples, generator parameters, credentials, download
+        links, checksums, citations that reveal the collection, or any other
+        scientific detail.
+
+        If your identity must also remain confidential, stop here and use the
+        private hidden-instance contact in `MAINTAINERS.md` instead.
+  - type: input
+    id: github_handle
+    attributes:
+      label: GitHub handle
+      description: The account to invite to a dedicated private staging repository.
+      placeholder: "@researcher"
+    validations:
+      required: true
+  - type: dropdown
+    id: evaluation_rights
+    attributes:
+      label: Authority for confidential evaluation
+      description: Do not paste the license or agreement here; it will be reviewed privately.
+      options:
+        - I have authority to provide the data for confidential benchmark evaluation
+        - The authority needs private review before transfer
+    validations:
+      required: true
+  - type: dropdown
+    id: upload_size
+    attributes:
+      label: Coarse total upload size
+      options:
+        - Less than 100 MB
+        - 100 MB to 2 GB
+        - More than 2 GB
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Public-issue safety confirmation
+      options:
+        - label: I included no hidden data, private link, credential, or identifying scientific detail in this issue.
+          required: true
+        - label: My identity may be public as the requester of a confidential intake channel.
+          required: true

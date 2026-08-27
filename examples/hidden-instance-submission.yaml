@@ -1,0 +1,52 @@
+# Synthetic fixture only. This file contains no actual hidden instance details.
+schema_version: 0.1.0
+submission_id: hidden.synthetic.001
+visibility: hidden
+submitter:
+  name: Synthetic Contributor
+  organization: null
+  github: synthetic-contributor
+  private_contact: synthetic@example.invalid
+scope:
+  problem_family: dynamic-darp
+  tier: small
+  instance_count: 2
+  format_version: 0.1.0
+  confidential_description: Synthetic validation fixture with no research data.
+artifacts:
+  - artifact_id: hidden.synthetic.001.instances
+    role: normalized_instances
+    private_uri: https://example.invalid/private/hidden.synthetic.001.parquet
+    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    byte_size: 1024
+    media_type: application/vnd.apache.parquet
+    encrypted: true
+rights:
+  authorized_to_submit: true
+  confidential_evaluation_permitted: true
+  public_redistribution_permitted: false
+  license_or_authority: Synthetic fixture; no third-party data.
+  retention_terms: Delete on request.
+  eventual_public_release: never
+  public_release_date: null
+provenance:
+  source_description: Generated solely as a schema fixture.
+  citations: []
+  transformations: No transformations.
+  privacy_review: Contains no people or personal data.
+public_disclosure:
+  level: opaque_only
+  approved_summary: null
+  approved_attribution: null
+known_accessors:
+  - name: Synthetic Contributor
+    affiliation: null
+    role: instance contributor
+    access_since: "2026-08-27"
+reference_results: []
+attestations:
+  information_complete: true
+  accessors_complete: true
+  no_public_upload: true
+  signed_by: Synthetic Contributor
+  signed_at: "2026-08-27T00:00:00Z"

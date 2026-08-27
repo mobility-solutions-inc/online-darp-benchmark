@@ -1,0 +1,17 @@
+# CONFIDENTIAL AND APPEND-ONLY. Add a new entry before granting access. Never
+# remove an entry when access is revoked; set revoked_at instead.
+schema_version: 0.1.0
+submission_id: <opaque-hidden-submission-id>
+entries:
+  - accessor_id: <stable-opaque-person-id>
+    name: <name>
+    affiliation: null
+    role: <contributor-reviewer-evaluation_operator-infrastructure_admin-or-incident_responder>
+    scope: <exact-data-and-system-scope>
+    granted_at: <rfc3339-timestamp>
+    revoked_at: null
+    approved_by: <approver>
+    algorithm_teams: []
+    reason: <why-access-is-necessary>
+    affected_result_ids: []
+    incident_notes: null

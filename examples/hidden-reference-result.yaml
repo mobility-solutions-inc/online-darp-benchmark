@@ -1,0 +1,64 @@
+schema_version: 0.2.0
+result_id: synthetic-hidden.reference.h0.seed7
+benchmark_version: 0.1.0
+instance_id: hidden.synthetic.001.case-a
+instance_sha256: null
+supersedes_result_id: null
+standing:
+  instance_visibility: hidden
+  classification: contributor_reference
+  official: false
+  access:
+    instance_contributor_involved: true
+    algorithm_team_had_pre_evaluation_access: true
+    controlled_evaluation: false
+    evaluation_operator: Synthetic Contributor
+    access_attestation_uri: null
+  conflicts:
+    - The instance contributor authored and ran the reference algorithm.
+  eligibility_notes: Contributor-provided context only; ineligible for official rank or record.
+algorithm:
+  name: Synthetic Hidden Reference
+  version: 0.1.0
+  team:
+    - name: Synthetic Contributor
+      github: synthetic-contributor
+      roles:
+        - author
+        - controller
+  artifact_url: https://example.invalid/synthetic-hidden-reference
+  artifact_digest: example-only
+  internal_objective: Serve as many revealed requests as possible.
+  hard_and_soft_constraints: All benchmark feasibility constraints are hard.
+  prediction_data_track: none
+  uses_prediction: false
+  training_and_tuning_data: null
+  allows_relocation: false
+  relocation_policy: null
+evaluation:
+  mode: online
+  offline_objective: null
+  horizons:
+    information: 0
+    planning: 900
+    commitment: 300
+  acceptance_policy:
+    accepted_request_may_be_rejected: false
+    accepted_request_may_be_reassigned: false
+    pickup_promise_may_change: false
+run:
+  run_status: unsupported
+  failure_reason: Synthetic standing-validation fixture; no run was performed.
+  random_seed: 7
+  started_at: "2026-08-27T00:00:00Z"
+  hardware: Synthetic example
+  operating_system: Synthetic example
+  time_limit_seconds: 60
+  memory_limit_mb: 256
+offline_certificate: null
+artifacts:
+  event_log_uri: withheld:hidden-instance-access
+  event_log_sha256: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+  solution_uri: null
+  invocation: synthetic-fixture --not-executed
+notes: Schema fixture only; not a benchmark result.

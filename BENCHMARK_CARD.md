@@ -121,9 +121,10 @@ Results are labeled with one of these tracks:
 | `external_disclosed` | Public or private external data, fully disclosed |
 
 Test requests may never be used before their reveal time except at the declared
-lookahead. A future hidden suite will separate train, validation, and test periods
-or generators. The initial public-only release cannot prevent test-set tuning, so
-results must disclose it.
+lookahead. A hidden suite separates train, validation, and test periods or
+generators; confidential intake may begin before official hidden evaluation is
+funded. Public evaluation cannot prevent test-set tuning, so results must
+disclose it.
 
 ## Relocation
 
@@ -173,6 +174,24 @@ following groups individually.
 Metrics that do not apply are `null` and accompanied by notes. Zero means the
 quantity was measured and no event occurred; `null` must not be silently treated
 as zero.
+
+## Result standing
+
+The scorecard and a result's eligibility are separate. Every result is labeled:
+
+- `official` after protocol and conflict review;
+- `contributor_reference` when a hidden-instance contributor or algorithm team
+  with hidden access supplies useful context; or
+- `unofficial` for exploratory, incomplete, self-reported, protocol-deviating,
+  or other conflict-affected runs.
+
+A contributor reference can be reproducible and feasible but is never an
+official rank or record. Official hidden results require an algorithm frozen
+before the run, a disclosed algorithm team, no pre-evaluation hidden access by
+that team, no instance-
+contributor involvement in algorithm or result selection, independent controlled
+evaluation, and an access attestation. The complete proposed policy is
+[RFC-0003](proposals/0003-hidden-instance-submission-and-result-eligibility.md).
 
 ## Repetition and uncertainty
 

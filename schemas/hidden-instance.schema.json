@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mobility-solutions-inc.github.io/online-darp-benchmark/schemas/hidden-instance.schema.json",
+  "title": "Confidential hidden-instance submission",
+  "description": "This manifest is confidential and must never be committed to the public benchmark repository.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "submission_id",
+    "visibility",
+    "submitter",
+    "scope",
+    "artifacts",
+    "rights",
+    "provenance",
+    "public_disclosure",
+    "known_accessors",
+    "attestations"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1.0"},
+    "submission_id": {"$ref": "#/$defs/opaque_id"},
+    "visibility": {"const": "hidden"},
+    "submitter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "organization", "github", "private_contact"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "organization": {"type": ["string", "null"]},
+        "github": {"type": ["string", "null"]},
+        "private_contact": {"type": "string", "minLength": 1}
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["problem_family", "tier", "instance_count", "format_version", "confidential_description"],
+      "properties": {
+        "problem_family": {"type": "string", "minLength": 1},
+        "tier": {"enum": ["small", "large", "mixed", "other"]},
+        "instance_count": {"type": "integer", "minimum": 1},
+        "format_version": {"type": "string", "minLength": 1},
+        "confidential_description": {"type": "string", "minLength": 1}
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["artifact_id", "role", "private_uri", "sha256", "byte_size", "media_type", "encrypted"],
+        "properties": {
+          "artifact_id": {"$ref": "#/$defs/opaque_id"},
+          "role": {"enum": ["source", "normalized_instances", "transformation", "reference_result", "documentation", "other"]},
+          "private_uri": {"type": "string", "format": "uri"},
+          "sha256": {"$ref": "#/$defs/sha256"},
+          "byte_size": {"type": "integer", "minimum": 1},
+          "media_type": {"type": "string", "minLength": 1},
+          "encrypted": {"type": "boolean"}
+        }
+      }
+    },
+    "rights": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authorized_to_submit",
+        "confidential_evaluation_permitted",
+        "public_redistribution_permitted",
+        "license_or_authority",
+        "retention_terms",
+        "eventual_public_release"
+      ],
+      "properties": {
+        "authorized_to_submit": {"const": true},
+        "confidential_evaluation_permitted": {"const": true},
+        "public_redistribution_permitted": {"type": "boolean"},
+        "license_or_authority": {"type": "string", "minLength": 1},
+        "retention_terms": {"type": "string", "minLength": 1},
+        "eventual_public_release": {"enum": ["never", "with_future_permission", "after_date"]},
+        "public_release_date": {"type": ["string", "null"], "format": "date"}
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["eventual_public_release"],
+            "properties": {"eventual_public_release": {"const": "after_date"}}
+          },
+          "then": {
+            "required": ["public_release_date"],
+            "properties": {"public_release_date": {"type": "string", "format": "date"}}
+          }
+        }
+      ]
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_description", "citations", "transformations", "privacy_review"],
+      "properties": {
+        "source_description": {"type": "string", "minLength": 1},
+        "citations": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "transformations": {"type": "string", "minLength": 1},
+        "privacy_review": {"type": "string", "minLength": 1}
+      }
+    },
+    "public_disclosure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "approved_summary", "approved_attribution"],
+      "properties": {
+        "level": {"enum": ["opaque_only", "approved_summary"]},
+        "approved_summary": {"type": ["string", "null"]},
+        "approved_attribution": {"type": ["string", "null"]}
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["level"],
+            "properties": {"level": {"const": "approved_summary"}}
+          },
+          "then": {
+            "properties": {"approved_summary": {"type": "string", "minLength": 1}}
+          }
+        }
+      ]
+    },
+    "known_accessors": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/accessor"}
+    },
+    "reference_results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["result_id", "artifact_uri", "sha256", "classification", "official"],
+        "properties": {
+          "result_id": {"$ref": "#/$defs/opaque_id"},
+          "artifact_uri": {"type": "string", "format": "uri"},
+          "sha256": {"$ref": "#/$defs/sha256"},
+          "classification": {"const": "contributor_reference"},
+          "official": {"const": false}
+        }
+      }
+    },
+    "attestations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["information_complete", "accessors_complete", "no_public_upload", "signed_by", "signed_at"],
+      "properties": {
+        "information_complete": {"const": true},
+        "accessors_complete": {"const": true},
+        "no_public_upload": {"const": true},
+        "signed_by": {"type": "string", "minLength": 1},
+        "signed_at": {"type": "string", "format": "date-time"}
+      }
+    }
+  },
+  "$defs": {
+    "opaque_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,191}$"},
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "accessor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "affiliation", "role", "access_since"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "affiliation": {"type": ["string", "null"]},
+        "role": {"type": "string", "minLength": 1},
+        "access_since": {"type": "string", "format": "date"}
+      }
+    }
+  }
+}

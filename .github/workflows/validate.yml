@@ -22,11 +22,17 @@ jobs:
       - name: Check schemas and examples
         run: |
           python -m json.tool schemas/instance.schema.json >/dev/null
+          python -m json.tool schemas/hidden-instance.schema.json >/dev/null
+          python -m json.tool schemas/hidden-access-ledger.schema.json >/dev/null
+          python -m json.tool schemas/hidden-suite-registry.schema.json >/dev/null
           python -m json.tool schemas/result.schema.json >/dev/null
           python -m json.tool schemas/event.schema.json >/dev/null
           odb-validate instance examples/instance.yaml
+          odb-validate hidden-instance examples/hidden-instance-submission.yaml
+          odb-validate hidden-access-ledger examples/hidden-access-ledger.yaml
+          odb-validate hidden-suite-registry manifests/hidden-suites.yaml
           odb-validate result examples/result.yaml
+          odb-validate result examples/hidden-reference-result.yaml
           odb-validate events examples/event-log.jsonl
       - name: Test
         run: pytest
-

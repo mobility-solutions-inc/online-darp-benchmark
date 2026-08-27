@@ -1,0 +1,16 @@
+# Synthetic fixture only. Real ledgers are confidential.
+schema_version: 0.1.0
+submission_id: hidden.synthetic.001
+entries:
+  - accessor_id: person.synthetic-contributor
+    name: Synthetic Contributor
+    affiliation: null
+    role: contributor
+    scope: All synthetic fixture artifacts
+    granted_at: "2026-08-27T00:00:00Z"
+    revoked_at: null
+    approved_by: Synthetic Maintainer
+    algorithm_teams: []
+    reason: Created the synthetic fixture.
+    affected_result_ids: []
+    incident_notes: null

@@ -12,6 +12,8 @@
 - Import or pin every applicable source artifact with checksums.
 - Publish deterministic normalization and reveal-schedule transformations.
 - Add a small synthetic smoke suite and reference evaluator.
+- Pilot confidential intake using synthetic data, isolated staging, and access
+  ledgers; accept real hidden submissions without promising evaluation dates.
 
 ## 0.3 — Reference results
 
@@ -29,7 +31,6 @@
 ## Later — Sponsored hidden evaluation
 
 - Secure independent infrastructure funding.
-- Publish evaluator access, compute, submission, retention, leakage, and incident
-  policies before accepting hidden submissions.
+- Fund and audit evaluator access, compute, submission quotas, retention,
+  leakage, and incident operations before producing official hidden results.
 - Construct held-out instances and keep public training data separate.
-

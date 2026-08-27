@@ -20,11 +20,11 @@ release; a favorable sample cannot replace the full scorecard.
 
 Provide the result manifest, canonical event log, immutable algorithm artifact,
 exact invocation, fixed seeds, hardware, and disclosures for the internal
-objective, prediction data, tuning, and relocation. Missing, failed, and
-unsupported configurations remain part of the record.
+objective, solver and access requirements, prediction data, tuning, and
+relocation. Missing, failed, and unsupported configurations remain part of the
+record.
 
 [Open a new-result pull request](https://github.com/mobility-solutions-inc/online-darp-benchmark/compare)
 
 Read the [complete contribution guide](https://github.com/mobility-solutions-inc/online-darp-benchmark/blob/main/CONTRIBUTING.md)
 before submitting.
-

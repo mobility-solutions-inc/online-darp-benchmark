@@ -1,6 +1,6 @@
 # Start from examples/result.yaml and replace every value below. Do not delete
 # failed or unsupported runs; use run_status and failure_reason.
-schema_version: 0.1.0
+schema_version: 0.2.0
 result_id: <algorithm.instance.lookahead.seed>
 benchmark_version: <semantic-version>
 instance_id: <instance-id>
@@ -12,6 +12,10 @@ algorithm:
   artifact_url: <immutable-source-or-container-url>
   artifact_digest: <commit-or-container-digest>
   internal_objective: <objective-or-reward-description>
+  optimization_stack:
+    uses_external_components: false
+    components: []
+    notes: <state-none-or-list-every-external-component>
   hard_and_soft_constraints: <constraint-description>
   prediction_data_track: <none-provided_only-or-external_disclosed>
   uses_prediction: false
@@ -45,4 +49,3 @@ artifacts:
   solution_uri: null
   invocation: <exact-command-or-workflow>
 notes: null
-

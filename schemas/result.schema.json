@@ -16,7 +16,7 @@
     "artifacts"
   ],
   "properties": {
-    "schema_version": {"const": "0.1.0"},
+    "schema_version": {"const": "0.2.0"},
     "result_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,191}$"},
     "benchmark_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
     "instance_id": {"type": "string", "minLength": 1},
@@ -31,6 +31,7 @@
         "artifact_url",
         "artifact_digest",
         "internal_objective",
+        "optimization_stack",
         "prediction_data_track",
         "uses_prediction",
         "allows_relocation"
@@ -41,6 +42,33 @@
         "artifact_url": {"type": "string", "format": "uri"},
         "artifact_digest": {"type": "string", "minLength": 1},
         "internal_objective": {"type": "string", "minLength": 1},
+        "optimization_stack": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["uses_external_components", "components"],
+          "properties": {
+            "uses_external_components": {"type": "boolean"},
+            "components": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/optimization_component"}
+            },
+            "notes": {"type": ["string", "null"]}
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {"uses_external_components": {"const": false}}
+              },
+              "then": {"properties": {"components": {"maxItems": 0}}}
+            },
+            {
+              "if": {
+                "properties": {"uses_external_components": {"const": true}}
+              },
+              "then": {"properties": {"components": {"minItems": 1}}}
+            }
+          ]
+        },
         "hard_and_soft_constraints": {"type": ["string", "null"]},
         "prediction_data_track": {
           "enum": ["none", "provided_only", "external_disclosed"]
@@ -169,7 +197,7 @@
         "computation": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["decision_latency_mean_ms", "decision_latency_p95_ms", "decision_latency_max_ms", "wall_time_seconds", "peak_memory_mb", "decision_epochs", "timeouts"],
+          "required": ["decision_latency_mean_ms", "decision_latency_p95_ms", "decision_latency_max_ms", "wall_time_seconds", "peak_memory_mb", "decision_epochs", "timeouts", "external_solver_calls", "external_solver_wall_time_seconds", "external_solver_time_limit_hits"],
           "properties": {
             "decision_latency_mean_ms": {"$ref": "#/$defs/nullable_nonnegative"},
             "decision_latency_p95_ms": {"$ref": "#/$defs/nullable_nonnegative"},
@@ -177,7 +205,10 @@
             "wall_time_seconds": {"$ref": "#/$defs/nullable_nonnegative"},
             "peak_memory_mb": {"$ref": "#/$defs/nullable_nonnegative"},
             "decision_epochs": {"$ref": "#/$defs/nullable_count"},
-            "timeouts": {"$ref": "#/$defs/nullable_count"}
+            "timeouts": {"$ref": "#/$defs/nullable_count"},
+            "external_solver_calls": {"$ref": "#/$defs/nullable_count"},
+            "external_solver_wall_time_seconds": {"$ref": "#/$defs/nullable_nonnegative"},
+            "external_solver_time_limit_hits": {"$ref": "#/$defs/nullable_count"}
           }
         },
         "feasibility": {
@@ -246,6 +277,48 @@
   ],
   "$defs": {
     "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "optimization_component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "component_id",
+        "name",
+        "component_type",
+        "version",
+        "role",
+        "license_name",
+        "license_url",
+        "access_class",
+        "paid_license_used",
+        "exact_environment_publicly_obtainable",
+        "threads",
+        "parameters"
+      ],
+      "properties": {
+        "component_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{1,63}$"
+        },
+        "name": {"type": "string", "minLength": 1},
+        "component_type": {
+          "enum": ["solver", "modeling_layer", "routing_engine", "other_optimization_component"]
+        },
+        "version": {"type": "string", "minLength": 1},
+        "role": {
+          "enum": ["online_decision", "offline_reference", "routing_or_travel_time", "training_or_tuning", "other"]
+        },
+        "license_name": {"type": "string", "minLength": 1},
+        "license_url": {"type": ["string", "null"], "format": "uri"},
+        "access_class": {
+          "enum": ["open_source", "public_no_cost", "restricted_no_cost", "commercial", "private"]
+        },
+        "paid_license_used": {"type": "boolean"},
+        "exact_environment_publicly_obtainable": {"type": "boolean"},
+        "threads": {"type": ["integer", "null"], "minimum": 1},
+        "parameters": {"type": "object"},
+        "notes": {"type": ["string", "null"]}
+      }
+    },
     "horizon": {
       "oneOf": [
         {"type": "integer", "minimum": 0},

@@ -38,8 +38,16 @@ TRAVEL_TIME_MULTIPLIER_NUMERATOR = 7
 TRAVEL_TIME_MULTIPLIER_DENOMINATOR = 5
 GRAPHHOPPER_PROFILE = "car"
 GRAPHHOPPER_COMMIT = "80ed17c5fa3f71175949ee0ad44732391172e03a"
-OSM_SOURCE_URL = (
-    "https://download.geofabrik.de/north-america/us/new-york-260801.osm.pbf"
+OSM_PARENT_SOURCE_URL = (
+    "https://download.geofabrik.de/north-america/us-northeast-260801.osm.pbf"
+)
+OSM_PARENT_SHA256 = "743e3935f485526eeec052088efc5e3934437c85c97917371a2dbe7ed12a5bb1"
+OSM_CROP_FILENAME = "nyc-routing-260801.osm.pbf"
+OSM_CROP_BBOX = [-74.35, 40.45, -73.65, 41.0]
+OSM_CROP_STRATEGY = "complete_ways"
+OSMIUM_VERSION = "1.15.0"
+OSMIUM_IMAGE_ID = (
+    "sha256:0bbcf4626032cc0aec2b288b6cbcf95617db17ca58ea9d478108a94168a5908a"
 )
 BALANCED_SHIFT_END_MS = 14_400_000
 
@@ -77,11 +85,11 @@ CITATIONS_BIB = """@misc{nyctlc2025triprecords,
   note = {Commit 6d4f168a0724a0f0bc7795b57f75fac8cf3010dd}
 }
 
-@misc{geofabrik2026newyork,
+@misc{geofabrik2026northeast,
   author = {{Geofabrik GmbH and OpenStreetMap contributors}},
-  title = {New York OpenStreetMap extract, 2026-08-01},
+  title = {US Northeast OpenStreetMap extract, 2026-08-01},
   year = {2026},
-  url = {https://download.geofabrik.de/north-america/us/new-york.html}
+  url = {https://download.geofabrik.de/north-america/us-northeast.html}
 }
 
 @software{graphhopper11,
@@ -104,7 +112,7 @@ Taxi and Limousine Commission public trip records and taxi-zone geometry.
 - Generator source:
   https://github.com/mobility-solutions-inc/ontra/tree/6d4f168a0724a0f0bc7795b57f75fac8cf3010dd/dispatching/scripts
 - Road-network source and license:
-  https://download.geofabrik.de/north-america/us/new-york.html
+  https://download.geofabrik.de/north-america/us-northeast.html
   https://www.openstreetmap.org/copyright
 - Routing engine:
   https://github.com/mobility-solutions-inc/graphhopper
@@ -447,8 +455,14 @@ def _write_travel_matrix(
             "graphhopper_source_commit": GRAPHHOPPER_COMMIT,
             "graphhopper_config_sha256": graphhopper_config_sha256,
             "graphhopper_server_info": graphhopper_info,
-            "osm_source_url": OSM_SOURCE_URL,
-            "osm_pbf_sha256": osm_pbf_sha256,
+            "osm_parent_source_url": OSM_PARENT_SOURCE_URL,
+            "osm_parent_sha256": OSM_PARENT_SHA256,
+            "osm_crop_filename": OSM_CROP_FILENAME,
+            "osm_crop_sha256": osm_pbf_sha256,
+            "osm_crop_bbox_wgs84": OSM_CROP_BBOX,
+            "osm_crop_strategy": OSM_CROP_STRATEGY,
+            "osmium_version": OSMIUM_VERSION,
+            "osmium_image_id": OSMIUM_IMAGE_ID,
             "time_semantics": (
                 "GraphHopper milliseconds truncated to whole seconds, multiplied by "
                 "1.4, rounded to nearest whole second, then stored as milliseconds"
@@ -790,7 +804,8 @@ def convert(
     source_checksums = {
         **{name: sha256_file(source / name) for name in PINNED_SOURCE_SHA256},
         **{f"upstream/{name}": digest for name, digest in UPSTREAM_TLC_SHA256.items()},
-        "upstream/new-york-260801.osm.pbf": osm_pbf_sha256,
+        "upstream/us-northeast-260801.osm.pbf": OSM_PARENT_SHA256,
+        f"derived/{OSM_CROP_FILENAME}": osm_pbf_sha256,
     }
     (provenance_root / "source-checksums.sha256").write_text(
         "".join(f"{digest}  {name}\n" for name, digest in sorted(source_checksums.items())),
@@ -812,8 +827,14 @@ def convert(
                 "graphhopper_build": graphhopper_build,
                 "graphhopper_source_commit": GRAPHHOPPER_COMMIT,
                 "graphhopper_config_sha256": graphhopper_config_sha256,
-                "osm_source_url": OSM_SOURCE_URL,
-                "osm_pbf_sha256": osm_pbf_sha256,
+                "osm_parent_source_url": OSM_PARENT_SOURCE_URL,
+                "osm_parent_sha256": OSM_PARENT_SHA256,
+                "osm_crop_filename": OSM_CROP_FILENAME,
+                "osm_crop_sha256": osm_pbf_sha256,
+                "osm_crop_bbox_wgs84": OSM_CROP_BBOX,
+                "osm_crop_strategy": OSM_CROP_STRATEGY,
+                "osmium_version": OSMIUM_VERSION,
+                "osmium_image_id": OSMIUM_IMAGE_ID,
                 "time_multiplier": 1.4,
                 "rounding": (
                     "truncate raw milliseconds to seconds, multiply by 1.4, "
@@ -843,7 +864,7 @@ def convert(
                 "https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page",
                 "https://cityofnewyork.github.io/opendatatsm/publicpolicies.html",
                 "https://github.com/mobility-solutions-inc/ontra",
-                "https://download.geofabrik.de/north-america/us/new-york.html",
+                "https://download.geofabrik.de/north-america/us-northeast.html",
                 "https://www.openstreetmap.org/copyright",
                 "https://github.com/mobility-solutions-inc/graphhopper",
             ],
@@ -910,7 +931,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--osm-pbf-sha256",
         required=True,
-        help="SHA-256 of the pinned Geofabrik OSM PBF loaded by GraphHopper",
+        help="SHA-256 of the deterministic NYC OSM crop loaded by GraphHopper",
     )
     parser.add_argument(
         "--graphhopper-build",

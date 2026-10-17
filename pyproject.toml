@@ -12,7 +12,7 @@ license = {text = "MIT"}
 authors = [{name = "Mobility Solutions Inc"}]
 dependencies = [
   "jsonschema[format]>=4.23,<5",
-  "pyarrow>=21,<22",
+  "pyarrow>=21,<24",
   "PyYAML>=6,<7",
 ]
 

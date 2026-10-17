@@ -159,8 +159,25 @@ def _write_collection(
         {
             "format_version": FORMAT_VERSION,
             "collection_id": collection_id,
-            "license": {"notice_paths": notice_paths or []},
+            "collection_version": "0.0.0-test",
+            "source": {
+                "source_id": "test",
+                "source_release": "v0",
+                "canonical_url": "https://example.org/test",
+                "citations": ["Test fixture"],
+            },
+            "license": {"spdx_or_name": "MIT", "notice_paths": notice_paths or []},
             "artifacts": artifacts,
+            "transformations": [
+                {
+                    "transformation_id": "test",
+                    "code_url": "https://example.org/code",
+                    "code_version": "test",
+                    "parameters": {},
+                    "random_seed": None,
+                    "deterministic": True,
+                }
+            ],
             "instances": [manifest_path],
         },
     )
@@ -466,7 +483,7 @@ def test_validator_rejects_requests_outside_every_vehicle_shift(
     tmp_path: Path, vehicle_overrides: dict[str, int]
 ) -> None:
     _write_collection(tmp_path, vehicle_overrides=vehicle_overrides)
-    with pytest.raises(CollectionValidationError, match="within its shift and capacity"):
+    with pytest.raises(CollectionValidationError, match="within its shift and limits"):
         validate_collection(tmp_path)
 
 
@@ -504,3 +521,81 @@ def test_validator_rejects_reused_physical_problem_id(tmp_path: Path) -> None:
 
     with pytest.raises(CollectionValidationError, match="reused for a different physical"):
         validate_collection(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("remove", "expected_error"),
+    [
+        (("collection_version",), "missing collection_version"),
+        (("source", "citations"), "missing source.citations"),
+        (("license", "spdx_or_name"), "missing license.spdx_or_name"),
+        (("transformations",), "missing transformations"),
+    ],
+)
+def test_validator_requires_collection_manifest_fields(
+    tmp_path: Path, remove: tuple[str, ...], expected_error: str
+) -> None:
+    _write_collection(tmp_path)
+    collection = yaml.safe_load((tmp_path / "collection.yaml").read_text())
+    parent = collection
+    for key in remove[:-1]:
+        parent = parent[key]
+    del parent[remove[-1]]
+    dump_yaml(tmp_path / "collection.yaml", collection)
+    with pytest.raises(CollectionValidationError, match=expected_error):
+        validate_collection(tmp_path)
+
+
+def test_validator_requires_registered_sort_keys(tmp_path: Path) -> None:
+    _write_collection(tmp_path)
+    collection = yaml.safe_load((tmp_path / "collection.yaml").read_text())
+    collection["artifacts"]["test.requests"]["sort_keys"] = ["request_id"]
+    dump_yaml(tmp_path / "collection.yaml", collection)
+    with pytest.raises(CollectionValidationError, match="sort_keys must be"):
+        validate_collection(tmp_path)
+
+
+def test_validator_applies_max_route_duration_to_serviceability(tmp_path: Path) -> None:
+    _write_collection(tmp_path, vehicle_overrides={"max_route_duration_ms": 20_000})
+    with pytest.raises(CollectionValidationError, match="within its shift and limits"):
+        validate_collection(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "onboard_overrides",
+    [
+        {"earliest_pickup_time_ms": 10, "pickup_time_ms": 0, "pickup_departure_time_ms": 10},
+        {"pickup_time_ms": 10, "pickup_departure_time_ms": 5},
+    ],
+)
+def test_validator_rejects_impossible_onboard_chronology(
+    tmp_path: Path, onboard_overrides: dict[str, int]
+) -> None:
+    _write_collection(
+        tmp_path,
+        vehicle_overrides={"initial_load": 1},
+        onboard_requests=[_onboard_request(**onboard_overrides)],
+    )
+    with pytest.raises(CollectionValidationError, match="impossible onboard pickup chronology"):
+        validate_collection(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("uri", "valid"),
+    [
+        ("https://raw.githubusercontent.com/org/repo/main/table.parquet", False),
+        ("https://github.com/org/repo/raw/v1.0/table.parquet", False),
+        ("https://gitlab.com/org/repo/-/raw/main/table.parquet", False),
+        (f"https://raw.githubusercontent.com/org/repo/{'a' * 40}/table.parquet", True),
+        ("https://github.com/org/repo/releases/download/v1.0/table.parquet", True),
+    ],
+)
+def test_validator_rejects_branch_artifact_uris(tmp_path: Path, uri: str, valid: bool) -> None:
+    root = tmp_path / "collection"
+    _write_collection(root)
+    external = _move_requests_to_uri(root, uri)
+    if valid:
+        assert validate_collection(root, fetch_uri=lambda requested: external)["valid"]
+    else:
+        with pytest.raises(CollectionValidationError, match="full commit hash"):
+            validate_collection(root, fetch_uri=lambda requested: external)

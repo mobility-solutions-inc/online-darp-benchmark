@@ -468,9 +468,102 @@ def _uri_error(uri: str) -> str | None:
     parts = urlsplit(uri)
     if parts.scheme != "https" or not parts.netloc:
         return "artifact uri must be an absolute https URL"
-    if "latest" in parts.path.lower().split("/"):
+    segments = parts.path.split("/")
+    if "latest" in (segment.lower() for segment in segments):
         return "artifact uri must not be an unversioned latest URL"
+    host = parts.netloc.lower()
+    ref = None
+    if host == "raw.githubusercontent.com" and len(segments) > 3:
+        ref = segments[3]
+    elif host in {"github.com", "gitlab.com"}:
+        for marker in ("raw", "blob"):
+            if marker in segments[3:]:
+                position = segments.index(marker, 3) + 1
+                ref = segments[position] if position < len(segments) else ""
+                break
+    if ref is not None and not (
+        len(ref) in (40, 64) and all(character in "0123456789abcdef" for character in ref)
+    ):
+        return "artifact uri must pin a full commit hash, not a branch or tag"
     return None
+
+
+def _manifest_errors(collection: Any) -> list[str]:
+    """Check the collection manifest fields RFC-0001 requires."""
+
+    if not isinstance(collection, Mapping):
+        return ["collection.yaml must be a mapping"]
+    errors = [
+        f"collection.yaml missing {key}"
+        for key in ("format_version", "collection_id", "collection_version")
+        if not collection.get(key)
+    ]
+    source = collection.get("source")
+    if not isinstance(source, Mapping):
+        errors.append("collection.yaml missing source")
+    else:
+        errors.extend(
+            f"collection.yaml missing source.{key}"
+            for key in ("source_id", "source_release", "canonical_url", "citations")
+            if not source.get(key)
+        )
+    license_record = collection.get("license")
+    if not isinstance(license_record, Mapping) or not license_record.get("spdx_or_name"):
+        errors.append("collection.yaml missing license.spdx_or_name")
+    elif not isinstance(license_record.get("notice_paths"), list):
+        errors.append("collection.yaml license.notice_paths must be a list")
+    transformations = collection.get("transformations")
+    if not isinstance(transformations, list) or not transformations:
+        errors.append("collection.yaml missing transformations")
+    else:
+        for index, transformation in enumerate(transformations):
+            for key in (
+                "transformation_id",
+                "code_url",
+                "code_version",
+                "parameters",
+                "random_seed",
+                "deterministic",
+            ):
+                if not isinstance(transformation, Mapping) or key not in transformation:
+                    errors.append(f"collection.yaml transformations[{index}] missing {key}")
+    if not isinstance(collection.get("instances"), list) or not collection["instances"]:
+        errors.append("collection.yaml missing instances")
+    artifacts = collection.get("artifacts")
+    if not isinstance(artifacts, Mapping) or not artifacts:
+        errors.append("collection.yaml missing artifacts")
+        return errors
+    for artifact_id, artifact in artifacts.items():
+        if not isinstance(artifact, Mapping):
+            errors.append(f"{artifact_id}: artifact must be a mapping")
+            continue
+        missing = [
+            key
+            for key in ("role", "schema_name", "schema_version", "sort_keys", "files")
+            if key not in artifact
+        ]
+        if missing:
+            errors.append(f"{artifact_id}: missing {', '.join(missing)}")
+            continue
+        if artifact["schema_name"] not in SORT_KEYS or artifact["role"] != artifact["schema_name"]:
+            errors.append(f"{artifact_id}: unknown or mismatched role/schema_name")
+            continue
+        if artifact["schema_version"] != SCHEMA_VERSION:
+            errors.append(f"{artifact_id}: unsupported schema_version {artifact['schema_version']}")
+        if artifact["sort_keys"] != SORT_KEYS[artifact["schema_name"]]:
+            errors.append(f"{artifact_id}: sort_keys must be {SORT_KEYS[artifact['schema_name']]}")
+        if not isinstance(artifact["files"], list) or not artifact["files"]:
+            errors.append(f"{artifact_id}: files must be a nonempty list")
+            continue
+        for file_record in artifact["files"]:
+            missing = [
+                key
+                for key in ("sha256", "byte_size", "row_count")
+                if not isinstance(file_record, Mapping) or key not in file_record
+            ]
+            if missing:
+                errors.append(f"{artifact_id}: file record missing {', '.join(missing)}")
+    return errors
 
 
 def _artifact_table(
@@ -563,10 +656,13 @@ def _artifact_table(
 def _requests_outside_fleet_shifts(
     requests: pa.Table, vehicles: pa.Table, travel: pa.Table, node_count: int
 ) -> int:
-    """Count requests that no vehicle can serve alone within its shift and capacity.
+    """Count requests that no vehicle can serve alone within its shift and limits.
 
-    This is a necessary condition: it ignores travel to the pickup and to the
-    terminal, so it never rejects a request that some vehicle could serve.
+    A vehicle qualifies if it has enough seats, starts by the latest pickup, and
+    can finish pickup service, direct travel, and drop-off service within both
+    its shift and its maximum route duration. This is a necessary condition: it
+    ignores travel to the pickup and to the terminal, so it never rejects a
+    request that some vehicle could serve.
     """
 
     pair_index = pc.add(
@@ -590,11 +686,15 @@ def _requests_outside_fleet_shifts(
             vehicles["seat_capacity"].to_pylist(),
             vehicles["shift_start_time_ms"].to_pylist(),
             vehicles["shift_end_time_ms"].to_pylist(),
+            vehicles["max_route_duration_ms"].to_pylist(),
             strict=True,
         )
     )
     # Most permissive shifts first, so later groups only see the few requests left.
-    for capacity, start, end in sorted(shifts, key=lambda shift: (shift[1], -shift[2], -shift[0])):
+    for capacity, start, end, max_duration in sorted(
+        shifts,
+        key=lambda shift: (shift[1], -shift[2], shift[3] is not None, -(shift[3] or 0), -shift[0]),
+    ):
         if remaining.num_rows == 0:
             break
         served = pc.and_(
@@ -610,6 +710,8 @@ def _requests_outside_fleet_shifts(
                 end,
             ),
         )
+        if max_duration is not None:
+            served = pc.and_(served, pc.less_equal(remaining["busy"], max_duration))
         remaining = remaining.filter(pc.invert(served))
     return remaining.num_rows
 
@@ -633,8 +735,21 @@ def validate_collection(
 def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[str, Any]:
     collection_path = root / "collection.yaml"
     collection = yaml.safe_load(collection_path.read_text(encoding="utf-8"))
-    errors: list[str] = []
+    errors: list[str] = _manifest_errors(collection)
     warnings: list[str] = []
+    if errors:
+        raise CollectionValidationError(
+            {
+                "collection_id": collection.get("collection_id")
+                if isinstance(collection, Mapping)
+                else None,
+                "valid": False,
+                "artifact_count": 0,
+                "instance_count": 0,
+                "errors": errors,
+                "warnings": warnings,
+            }
+        )
     if collection.get("format_version") != FORMAT_VERSION:
         errors.append(f"unsupported format_version: {collection.get('format_version')}")
     for notice_path in collection.get("license", {}).get("notice_paths", []):
@@ -815,7 +930,7 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
             if unserved:
                 errors.append(
                     f"{relative_manifest}: {unserved} request(s) cannot be served by any "
-                    "vehicle within its shift and capacity"
+                    "vehicle within its shift and limits"
                 )
 
         capacity_key = ("request-capacity", request_id, fleet_id)
@@ -931,6 +1046,16 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
                     errors.append(f"{onboard_id}: route position below one")
                 if any(value < 0 for value in onboard["dropoff_service_time_ms"]):
                     errors.append(f"{onboard_id}: negative service time")
+                if any(
+                    not earliest <= pickup <= departure
+                    for earliest, pickup, departure in zip(
+                        onboard["earliest_pickup_time_ms"],
+                        onboard["pickup_time_ms"],
+                        onboard["pickup_departure_time_ms"],
+                        strict=True,
+                    )
+                ):
+                    errors.append(f"{onboard_id}: impossible onboard pickup chronology")
                 if any(
                     value is not None and value < 1 for value in onboard["max_ride_time_ms"]
                 ):

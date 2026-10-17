@@ -24,6 +24,8 @@ def _write_collection(
     vehicle_overrides: dict[str, object] | None = None,
     request_overrides: dict[str, object] | None = None,
     travel_time_rows: int | None = None,
+    distance_mm: int | None = None,
+    onboard_requests: list[dict[str, object]] | None = None,
 ) -> None:
     collection_id = "test-collection"
     artifacts = {}
@@ -90,6 +92,10 @@ def _write_collection(
     tables["requests"][0].update(request_overrides or {})
     if travel_time_rows is not None:
         tables["travel_times"] = tables["travel_times"][:travel_time_rows]
+    if distance_mm is not None:
+        tables["travel_times"][1]["distance_mm"] = distance_mm
+    if onboard_requests is not None:
+        tables["onboard_requests"] = onboard_requests
     for role, rows in tables.items():
         artifact_id = f"test.{role}"
         path = tmp_path / "tables" / f"{role}.parquet"
@@ -223,3 +229,36 @@ def test_geographic_metadata_requires_projjson_crs() -> None:
         "GeoParquet crs must be an explicit PROJJSON object"
     ]
     assert _geo_metadata_errors({}) == ["missing or malformed GeoParquet metadata"]
+
+
+def test_validator_rejects_negative_travel_distance(tmp_path: Path) -> None:
+    _write_collection(tmp_path, distance_mm=-1)
+    with pytest.raises(CollectionValidationError, match="negative travel distance"):
+        validate_collection(tmp_path)
+
+
+@pytest.mark.parametrize("assigned_vehicle_index", [-1, 1])
+def test_validator_reports_invalid_onboard_vehicle_without_crashing(
+    tmp_path: Path, assigned_vehicle_index: int
+) -> None:
+    onboard = {
+        "onboard_request_index": 0,
+        "onboard_request_id": "onboard-1",
+        "source_request_id": None,
+        "party_size": 1,
+        "pickup_node_index": 0,
+        "dropoff_node_index": 1,
+        "earliest_pickup_time_ms": 0,
+        "pickup_time_ms": 0,
+        "pickup_departure_time_ms": 0,
+        "assigned_vehicle_index": assigned_vehicle_index,
+        "dropoff_route_position": 1,
+        "max_ride_time_ms": None,
+        "dropoff_service_time_ms": 0,
+    }
+    _write_collection(
+        tmp_path, vehicle_overrides={"initial_load": 1}, onboard_requests=[onboard]
+    )
+    with pytest.raises(CollectionValidationError, match="vehicle foreign key") as error:
+        validate_collection(tmp_path)
+    assert "onboard loads do not match" not in str(error.value)

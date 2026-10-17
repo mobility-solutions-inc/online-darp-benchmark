@@ -319,9 +319,10 @@ def write_parquet(
     else:
         table = pa.Table.from_pylist(list(rows), schema=schema)
     path.parent.mkdir(parents=True, exist_ok=True)
+    partial = path.with_name(path.name + ".partial")
     pq.write_table(
         table,
-        path,
+        partial,
         version="1.0",
         data_page_version="1.0",
         compression="zstd",
@@ -332,6 +333,7 @@ def write_parquet(
         store_schema=True,
         row_group_size=ROW_GROUP_SIZE,
     )
+    partial.replace(path)
     return {
         "path": path.as_posix(),
         "sha256": sha256_file(path),
@@ -635,6 +637,8 @@ def validate_collection(root: Path) -> dict[str, Any]:
                         break
             if any(value < 0 for value in travel["travel_time_ms"]):
                 errors.append(f"{relative_manifest}: negative travel time")
+            if any(value is not None and value < 0 for value in travel["distance_mm"]):
+                errors.append(f"{relative_manifest}: negative travel distance")
 
         request_nodes_key = ("request-nodes", request_id, components["nodes"])
         if request_nodes_key not in checked_relationships:
@@ -689,13 +693,14 @@ def validate_collection(root: Path) -> dict[str, Any]:
                     for value in onboard["assigned_vehicle_index"]
                 ):
                     errors.append(f"{onboard_id}: vehicle foreign key out of range")
-                loads = [0] * len(vehicles["vehicle_index"])
-                for vehicle_index, party_size in zip(
-                    onboard["assigned_vehicle_index"], onboard["party_size"], strict=True
-                ):
-                    loads[vehicle_index] += party_size
-                if loads != vehicles["initial_load"]:
-                    errors.append(f"{onboard_id}: onboard loads do not match vehicles")
+                else:
+                    loads = [0] * len(vehicles["vehicle_index"])
+                    for vehicle_index, party_size in zip(
+                        onboard["assigned_vehicle_index"], onboard["party_size"], strict=True
+                    ):
+                        loads[vehicle_index] += party_size
+                    if loads != vehicles["initial_load"]:
+                        errors.append(f"{onboard_id}: onboard loads do not match vehicles")
         elif any(vehicles["initial_load"]):
             errors.append(f"{relative_manifest}: fleet has load but no onboard_requests component")
 

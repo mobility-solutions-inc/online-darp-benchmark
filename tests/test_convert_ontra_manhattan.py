@@ -14,6 +14,7 @@ from online_darp_benchmark.convert_ontra_manhattan import (
     POINT_POOL_FILENAME,
     REQUESTS_FILENAME,
     ROUTING_RESUME_FILENAME,
+    TRAVEL_TIMES_DIRECTORY,
     convert,
 )
 from online_darp_benchmark.parquet_collection import (
@@ -183,13 +184,14 @@ def test_convert_ontra_manhattan_round_trip(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    ("resumed_config_sha256", "expected_resumed_routes"),
-    [("1" * 64, 0), ("2" * 64, 20)],
+    ("resumed_config_sha256", "truncate_first_shard", "expected_resumed_routes"),
+    [("1" * 64, False, 0), ("2" * 64, False, 20), ("1" * 64, True, 8)],
 )
 def test_interrupted_conversion_reuses_only_matching_routing_shards(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     resumed_config_sha256: str,
+    truncate_first_shard: bool,
     expected_resumed_routes: int,
 ) -> None:
     source = tmp_path / "source"
@@ -225,6 +227,9 @@ def test_interrupted_conversion_reuses_only_matching_routing_shards(
             with pytest.raises(RuntimeError, match="interrupted"):
                 run("1" * 64)
         assert (output / ROUTING_RESUME_FILENAME).exists()
+        if truncate_first_shard:
+            shard = output / TRAVEL_TIMES_DIRECTORY / "part-00000-00001.parquet"
+            shard.write_bytes(shard.read_bytes()[: shard.stat().st_size // 2])
 
         _GraphHopperHandler.route_count = 0
         run(resumed_config_sha256)

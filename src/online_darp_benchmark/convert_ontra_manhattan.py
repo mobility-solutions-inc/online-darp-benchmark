@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode, urlsplit
 
+import pyarrow as pa
 import pyarrow.parquet as pq
 
 from .parquet_collection import (
@@ -351,7 +352,11 @@ def _existing_parquet_record(
 ) -> dict[str, Any] | None:
     if not path.is_file():
         return None
-    parquet_file = pq.ParquetFile(path)
+    try:
+        parquet_file = pq.ParquetFile(path)
+    except (OSError, pa.ArrowException):
+        # An interrupted write leaves a truncated shard; route it again.
+        return None
     metadata = parquet_file.schema_arrow.metadata or {}
     if parquet_file.metadata.num_rows != expected_rows:
         return None

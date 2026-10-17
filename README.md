@@ -43,7 +43,7 @@ these pinned sources:
 2. [NYC-DARP v1.0](https://doi.org/10.5281/zenodo.20452171), distributed with
    [dynamic-ips](https://github.com/lab-core/dynamic-ips), for the large tier;
    and
-3. [Ontra Manhattan TLC 2025-01-22](https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/tag/ontra-manhattan-tlc-2025-01-22-v1.0.0-draft.1),
+3. [Ontra Manhattan TLC 2025-01-22](https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/tag/ontra-manhattan-tlc-2025-01-22-v1.0.0-draft.2),
    a new public large-instance family derived from NYC TLC records.
 
 The draft conversions currently cover all 68 Eccel DDARP request/reveal pairs and

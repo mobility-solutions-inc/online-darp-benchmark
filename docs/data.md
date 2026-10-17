@@ -20,20 +20,25 @@ Published bytes are immutable; corrections receive a new collection version.
 
 ## Draft downloads
 
-The RFC-0001 prerelease contains:
+The current RFC-0001 prereleases are:
 
 - [Eccel DDARP v1.2 Parquet collection](https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/download/parquet-data-v1.0.0-draft.1/eccel-ddarp-v1.2.parquet-draft.1.tar.gz)
   (68 instances, 1,158,386 bytes, SHA-256
   `69aafcc4ac5969b385ecfa611d2a5ed9664b60d8881a05aa4ea293f151cfd4a6`);
-- [NYC-DARP v1.0 Parquet collection](https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/download/parquet-data-v1.0.0-draft.1/nyc-darp-v1.0.parquet-draft.1.tar.gz)
-  (96 demand windows, 62 fleets, 150,096,002 bytes, SHA-256
-  `af1c09a4ce2ea657f0fa751d474c7c259c76ec50f016ab7b611bc2cbbc6507f4`);
-- [Ontra Manhattan TLC 2025-01-22 Parquet collection](https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/download/ontra-manhattan-tlc-2025-01-22-v1.0.0-draft.1/ontra-manhattan-tlc-2025-01-22-v1.parquet-draft.1.tar.gz)
-  (24,325 requests, 4 fleet deployments, 44,825,581 bytes, SHA-256
-  `53b3d9ea24b6dfa6650d7557a004094c7f12970eced60d2c5e0d482a31356ec9`);
+- [NYC-DARP v1.0 Parquet collection, draft.2](https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/download/parquet-data-v1.0.0-draft.2/nyc-darp-v1.0.parquet-draft.2.tar.gz)
+  (96 demand windows, 62 fleets, 150,099,496 bytes, SHA-256
+  `7288210715de03b094293beee9faceb1d4c8838d0605503439d5354daeb1c51e`);
+- [Ontra Manhattan TLC 2025-01-22 Parquet collection, draft.2](https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/download/ontra-manhattan-tlc-2025-01-22-v1.0.0-draft.2/ontra-manhattan-tlc-2025-01-22-v1.parquet-draft.2.tar.gz)
+  (24,325 requests, 4 fleet deployments, 44,826,971 bytes, SHA-256
+  `a0cfdc4307b5f9acd788bf5fbefe9a165c5cda7e4647c90a21e8e93f984c7723`);
 - [Ontra Manhattan TLC reproducibility source](https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/download/ontra-manhattan-tlc-2025-01-22-v1.0.0-draft.1/ontra-manhattan-tlc-2025-01-22-v1.source-v1.0.0.tar.gz)
   (149,162,468 bytes, SHA-256
   `064c9798853394782e1f3036f115b0323c3227b76affc1793946b29182a8e16a`).
+
+The NYC-DARP and Ontra Manhattan draft.2 collections supersede draft.1, whose
+geographic node files stored the GeoParquet CRS as a string rather than the
+required PROJJSON object. All other tables are byte-identical. The draft.1 assets
+remain published unchanged.
 
 These are GitHub prerelease mirrors while the DOI-bearing Zenodo record is
 pending. The machine-readable registry is

@@ -21,6 +21,12 @@ All notable benchmark and tooling changes are recorded here.
 - A permanent machine-readable restriction making code authored or controlled
   by Connor Riley ineligible for official hidden-instance results.
 
+### Fixed
+
+- Geographic node files now store the GeoParquet 1.1 CRS as an OGC:CRS84
+  PROJJSON object. NYC-DARP and Ontra Manhattan collections are republished as
+  1.0.0-draft.2; their other tables are unchanged.
+
 ## [0.1.0] - 2026-08-27
 
 ### Added

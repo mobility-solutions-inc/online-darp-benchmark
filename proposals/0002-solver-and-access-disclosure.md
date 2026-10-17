@@ -3,7 +3,7 @@
 - Status: Draft
 - Created: 2026-08-27
 - Discussion: [Issue #5](https://github.com/mobility-solutions-inc/online-darp-benchmark/issues/5)
-- Proposed result schema version: `0.2.0`
+- Proposed result schema version: `0.4.0`
 
 ## Summary
 
@@ -165,7 +165,7 @@ solver absent from the disclosed stack.
 
 ## Compatibility and adoption
 
-This changes the result schema from `0.1.0` to `0.2.0`. There are no official
+This changes the result schema from `0.3.0` to `0.4.0`. There are no official
 public submissions yet, so the synthetic example and result template can migrate
 without invalidating scientific results. If accepted, the repository should add
 scorecard rendering and filters before accepting v1 submissions.

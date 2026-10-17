@@ -1,0 +1,54 @@
+# CONFIDENTIAL: use only in the private staging repository assigned by a
+# maintainer. Never commit this manifest, instance data, links, or checksums to
+# the public benchmark repository.
+schema_version: 0.1.0
+submission_id: <opaque-id-assigned-by-maintainer>
+visibility: hidden
+submitter:
+  name: <name>
+  organization: null
+  github: null
+  private_contact: <email-or-private-contact>
+scope:
+  problem_family: <problem-family>
+  tier: <small-large-mixed-or-other>
+  instance_count: <positive-integer>
+  format_version: <instance-format-version>
+  confidential_description: <scientific-scope-and-instance-selection>
+artifacts:
+  - artifact_id: <opaque-artifact-id>
+    role: normalized_instances
+    private_uri: <private-immutable-uri>
+    sha256: <64-lowercase-hex-characters>
+    byte_size: <positive-integer>
+    media_type: application/vnd.apache.parquet
+    encrypted: true
+rights:
+  authorized_to_submit: true
+  confidential_evaluation_permitted: true
+  public_redistribution_permitted: false
+  license_or_authority: <license-contract-or-written-permission>
+  retention_terms: <retention-and-deletion-terms>
+  eventual_public_release: never
+  public_release_date: null
+provenance:
+  source_description: <complete-confidential-lineage>
+  citations: []
+  transformations: <code-version-parameters-seeds-and-parent-checksums>
+  privacy_review: <sensitive-data-review-and-mitigations>
+public_disclosure:
+  level: opaque_only
+  approved_summary: null
+  approved_attribution: null
+known_accessors:
+  - name: <submitter-name>
+    affiliation: null
+    role: instance contributor
+    access_since: <yyyy-mm-dd>
+reference_results: []
+attestations:
+  information_complete: true
+  accessors_complete: true
+  no_public_upload: true
+  signed_by: <submitter-name>
+  signed_at: <rfc3339-timestamp>

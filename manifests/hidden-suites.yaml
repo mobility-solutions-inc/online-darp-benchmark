@@ -1,0 +1,5 @@
+# Public registry only. Do not add confidential source names, exact scientific
+# details, instance counts, dates, locations, checksums, or private links.
+schema_version: 0.1.0
+policy_version: 0.1.0-draft.1
+entries: []

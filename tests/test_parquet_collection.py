@@ -956,3 +956,106 @@ def test_onboard_rider_cannot_leave_before_pickup_departure(tmp_path: Path) -> N
     )
     with pytest.raises(CollectionValidationError, match="cannot be dropped off within"):
         validate_collection(tmp_path)
+
+
+def test_onboard_route_duration_counts_elapsed_warm_start_time(tmp_path: Path) -> None:
+    # Departed at -100 s with 60 s of work left: at least 160 s against a 120 s limit.
+    _write_collection(
+        tmp_path,
+        vehicle_overrides={"initial_load": 1, "max_route_duration_ms": 120_000},
+        request_overrides={"max_ride_time_ms": None},
+        onboard_requests=[
+            _onboard_request(
+                earliest_pickup_time_ms=-100_000,
+                pickup_time_ms=-100_000,
+                pickup_departure_time_ms=-100_000,
+            )
+        ],
+    )
+    with pytest.raises(CollectionValidationError, match="shift and route duration"):
+        validate_collection(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("rows", "expected_error"),
+    [
+        (
+            [(0, 0, 0), (0, 0, 0), (1, 1, 0)],
+            "travel keys must be unique and sorted",
+        ),
+        ([(0, 1, 5), (0, 0, 0), (1, 1, 0)], "travel keys must be unique and sorted"),
+        ([(0, 0, 7), (0, 1, 5), (1, 1, 0)], "nonzero travel matrix diagonal"),
+    ],
+)
+def test_validator_checks_unreferenced_travel_table_keys(
+    tmp_path: Path, rows: list[tuple[int, int, int]], expected_error: str
+) -> None:
+    _write_collection(tmp_path)
+    collection = yaml.safe_load((tmp_path / "collection.yaml").read_text())
+    file_record = write_parquet(
+        tmp_path / "tables" / "orphan-travel.parquet",
+        [
+            {
+                "from_node_index": origin,
+                "to_node_index": destination,
+                "travel_time_ms": travel,
+                "distance_mm": None,
+            }
+            for origin, destination, travel in rows
+        ],
+        schema_name="travel_times",
+        collection_id="test-collection",
+        artifact_id="test.orphan-travel",
+    )
+    collection["artifacts"]["test.orphan-travel"] = artifact_record(
+        role="travel_times", file_record=file_record, collection_root=tmp_path
+    )
+    dump_yaml(tmp_path / "collection.yaml", collection)
+    with pytest.raises(CollectionValidationError, match=expected_error):
+        validate_collection(tmp_path)
+
+
+def test_serviceability_is_checked_per_onboard_state(tmp_path: Path) -> None:
+    # Same requests, fleet, and matrix; only the second onboard state blocks the pickup.
+    _write_collection(
+        tmp_path,
+        vehicle_overrides={"initial_load": 4},
+        request_overrides={"party_size": 4, "latest_pickup_time_ms": 75_000},
+        onboard_requests=[_onboard_request(party_size=4, dropoff_service_time_ms=10_000)],
+    )
+    collection = yaml.safe_load((tmp_path / "collection.yaml").read_text())
+    blocked = [
+        _onboard_request(
+            onboard_request_index=index,
+            onboard_request_id=f"onboard-{index}",
+            party_size=2,
+            dropoff_service_time_ms=10_000,
+        )
+        for index in range(2)
+    ]
+    file_record = write_parquet(
+        tmp_path / "tables" / "onboard-blocked.parquet",
+        blocked,
+        schema_name="onboard_requests",
+        collection_id="test-collection",
+        artifact_id="test.onboard-blocked",
+    )
+    collection["artifacts"]["test.onboard-blocked"] = artifact_record(
+        role="onboard_requests", file_record=file_record, collection_root=tmp_path
+    )
+    instance = yaml.safe_load((tmp_path / "instances/test.yaml").read_text())
+    instance["instance_id"] = "test-blocked"
+    instance["physical_problem_id"] = "test-blocked"
+    instance["components"]["onboard_requests"] = "test.onboard-blocked"
+    instance["physical_problem_sha256"] = physical_problem_sha256(
+        instance["components"],
+        collection["artifacts"],
+        service_horizon_ms=instance["time"]["service_horizon_ms"],
+        relocation_allowed=True,
+    )
+    dump_yaml(tmp_path / "instances/test-blocked.yaml", instance)
+    collection["instances"].append("instances/test-blocked.yaml")
+    dump_yaml(tmp_path / "collection.yaml", collection)
+
+    with pytest.raises(CollectionValidationError, match="test-blocked.yaml: 1 request"):
+        validate_collection(tmp_path)

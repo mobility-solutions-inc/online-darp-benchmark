@@ -870,6 +870,14 @@ def _artifact_local_errors(
         if any(item is not None and item < 1 for item in onboard["max_ride_time_ms"]):
             errors.append(f"{artifact_id}: nonpositive maximum ride time")
     elif role == "travel_times":
+        keys = list(zip(value["from_node_index"], value["to_node_index"], strict=True))
+        if any(previous >= current for previous, current in zip(keys, keys[1:])):
+            errors.append(f"{artifact_id}: travel keys must be unique and sorted")
+        if any(
+            origin == destination and travel != 0
+            for (origin, destination), travel in zip(keys, value["travel_time_ms"], strict=True)
+        ):
+            errors.append(f"{artifact_id}: nonzero travel matrix diagonal")
         if any(item < 0 for item in value["travel_time_ms"]):
             errors.append(f"{artifact_id}: negative travel time")
         if any(item is not None and item < 0 for item in value["distance_mm"]):
@@ -1178,7 +1186,13 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
 
         fleet_id = components["vehicles"]
 
-        shift_key = ("request-shifts", request_id, fleet_id, components["travel_times"])
+        shift_key = (
+            "request-shifts",
+            request_id,
+            fleet_id,
+            components["travel_times"],
+            components.get("onboard_requests", ""),
+        )
         referenced_nodes = pa.chunked_array(
             [
                 *cache[request_id]["pickup_node_index"].chunks,
@@ -1390,9 +1404,16 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
                         remaining_work += travel["travel_time_ms"][
                             dropoff * node_count + end_node
                         ]
+                    # A vehicle carrying this rider has been on its route since the
+                    # earlier of time zero and the rider's pickup departure.
+                    elapsed = (
+                        departure
+                        + remaining_work
+                        - min(0, onboard["pickup_departure_time_ms"][row])
+                    )
                     max_duration = vehicles["max_route_duration_ms"][vehicle]
                     if departure + remaining_work > vehicles["shift_end_time_ms"][vehicle] or (
-                        max_duration is not None and remaining_work > max_duration
+                        max_duration is not None and elapsed > max_duration
                     ):
                         unreachable += 1
                 if expired:

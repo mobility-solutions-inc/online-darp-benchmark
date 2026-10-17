@@ -1,6 +1,8 @@
 import json
 import struct
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pyarrow.parquet as pq
 import pytest
@@ -626,3 +628,71 @@ def test_validator_requires_core_instance_components(tmp_path: Path) -> None:
     dump_yaml(tmp_path / "instances/test.yaml", instance)
     with pytest.raises(CollectionValidationError, match="missing components nodes"):
         validate_collection(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "expected_error"),
+    [
+        (lambda instance: instance.pop("time"), "service_horizon_ms must be"),
+        (lambda instance: instance["relocation"].pop("allowed"), "relocation.allowed"),
+        (lambda instance: instance.update(collection_id="other"), "collection_id must be"),
+        (lambda instance: instance.pop("physical_problem_id"), "missing physical_problem_id"),
+        (
+            lambda instance: instance["components"].update(requests="test.vehicles"),
+            "wrong-role artifacts: requests",
+        ),
+        (
+            lambda instance: instance["components"].update(extra="test.nodes"),
+            "unknown components extra",
+        ),
+    ],
+)
+def test_validator_reports_malformed_instance_manifests(
+    tmp_path: Path, mutate: Callable[[dict[str, Any]], object], expected_error: str
+) -> None:
+    _write_collection(tmp_path)
+    instance = yaml.safe_load((tmp_path / "instances/test.yaml").read_text())
+    mutate(instance)
+    dump_yaml(tmp_path / "instances/test.yaml", instance)
+    with pytest.raises(CollectionValidationError, match=expected_error):
+        validate_collection(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("onboard_overrides", "vehicle_overrides", "expected_error"),
+    [
+        (
+            {
+                "earliest_pickup_time_ms": -10_000,
+                "pickup_time_ms": -10_000,
+                "pickup_departure_time_ms": -10_000,
+                "max_ride_time_ms": 5_000,
+            },
+            {},
+            "cannot reach drop-off within max_ride_time_ms",
+        ),
+        ({}, {"shift_end_time_ms": 20_000}, "cannot be dropped off within"),
+    ],
+)
+def test_validator_rejects_impossible_onboard_deadlines(
+    tmp_path: Path,
+    onboard_overrides: dict[str, int],
+    vehicle_overrides: dict[str, int],
+    expected_error: str,
+) -> None:
+    _write_collection(
+        tmp_path,
+        vehicle_overrides={"initial_load": 1, **vehicle_overrides},
+        onboard_requests=[_onboard_request(**onboard_overrides)],
+    )
+    with pytest.raises(CollectionValidationError, match=expected_error):
+        validate_collection(tmp_path)
+
+
+def test_validator_accepts_reachable_onboard_deadline(tmp_path: Path) -> None:
+    _write_collection(
+        tmp_path,
+        vehicle_overrides={"initial_load": 1},
+        onboard_requests=[_onboard_request(max_ride_time_ms=60_000)],
+    )
+    assert validate_collection(tmp_path)["valid"] is True

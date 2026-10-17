@@ -492,6 +492,44 @@ def _uri_error(uri: str) -> str | None:
     return None
 
 
+def _instance_errors(instance: Any, collection_id: Any) -> list[str]:
+    """Check the instance manifest fields the validator relies on."""
+
+    if not isinstance(instance, Mapping):
+        return ["instance manifest must be a mapping"]
+    if instance.get("format_version") != FORMAT_VERSION:
+        return [f"unsupported format_version: {instance.get('format_version')}"]
+    errors = [
+        f"missing {key}"
+        for key in (
+            "instance_id",
+            "physical_problem_id",
+            "physical_problem_sha256",
+            "problem_family",
+            "tier",
+        )
+        if not instance.get(key)
+    ]
+    if instance.get("collection_id") != collection_id:
+        errors.append(f"collection_id must be {collection_id!r}")
+    components = instance.get("components")
+    if not isinstance(components, Mapping):
+        errors.append("components must be a mapping")
+    else:
+        if missing := sorted(REQUIRED_INSTANCE_ROLES - set(components)):
+            errors.append(f"missing components {', '.join(missing)}")
+        if unknown := sorted(set(components) - REQUIRED_INSTANCE_ROLES - {"onboard_requests"}):
+            errors.append(f"unknown components {', '.join(unknown)}")
+    horizon = (instance.get("time") or {}).get("service_horizon_ms")
+    if not isinstance(horizon, int) or isinstance(horizon, bool) or horizon < 0:
+        errors.append("time.service_horizon_ms must be a nonnegative integer")
+    if not isinstance((instance.get("spatial") or {}).get("profile"), str):
+        errors.append("spatial.profile must be declared")
+    if not isinstance((instance.get("relocation") or {}).get("allowed"), bool):
+        errors.append("relocation.allowed must be a boolean")
+    return errors
+
+
 def _manifest_errors(collection: Any) -> list[str]:
     """Check the collection manifest fields RFC-0001 requires."""
 
@@ -802,16 +840,20 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
             errors.append(f"missing instance manifest: {relative_manifest}")
             continue
         instance = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
-        if instance.get("format_version") != FORMAT_VERSION:
-            errors.append(
-                f"{relative_manifest}: unsupported format_version: "
-                f"{instance.get('format_version')}"
-            )
+        if instance_errors := _instance_errors(instance, collection["collection_id"]):
+            errors.extend(f"{relative_manifest}: {message}" for message in instance_errors)
             continue
-        components = instance.get("components") or {}
-        missing_roles = sorted(REQUIRED_INSTANCE_ROLES - set(components))
-        if missing_roles:
-            errors.append(f"{relative_manifest}: missing components {', '.join(missing_roles)}")
+        components = instance["components"]
+        mismatched_roles = [
+            role
+            for role, artifact_id in components.items()
+            if collection["artifacts"].get(artifact_id, {}).get("role") != role
+        ]
+        if mismatched_roles:
+            errors.append(
+                f"{relative_manifest}: components reference missing or wrong-role "
+                f"artifacts: {', '.join(sorted(mismatched_roles))}"
+            )
             continue
         values = {role: dictionaries.get(artifact_id) for role, artifact_id in components.items()}
         if any(value is None for value in values.values()):
@@ -1104,6 +1146,61 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
                         loads[vehicle_index] += party_size
                     if loads != vehicles["initial_load"]:
                         errors.append(f"{onboard_id}: onboard loads do not match vehicles")
+            onboard_deadline_key = (
+                "onboard-deadlines",
+                onboard_id,
+                fleet_id,
+                components["travel_times"],
+            )
+            onboard_rows = range(len(onboard["onboard_request_index"]))
+            if (
+                onboard_deadline_key not in checked_relationships
+                and len(travel["travel_time_ms"]) == node_count * node_count
+                and all(
+                    0 <= onboard["assigned_vehicle_index"][row] < len(vehicles["vehicle_index"])
+                    and 0 <= onboard["dropoff_node_index"][row] < node_count
+                    for row in onboard_rows
+                )
+                and all(
+                    0 <= node < node_count
+                    for node in vehicles["start_node_index"]
+                    + [node for node in vehicles["end_node_index"] if node is not None]
+                )
+            ):
+                checked_relationships.add(onboard_deadline_key)
+                expired = unreachable = 0
+                for row in onboard_rows:
+                    vehicle = onboard["assigned_vehicle_index"][row]
+                    dropoff = onboard["dropoff_node_index"][row]
+                    # Earliest drop-off: drive straight there from the start node.
+                    arrival = (
+                        vehicles["shift_start_time_ms"][vehicle]
+                        + travel["travel_time_ms"][
+                            vehicles["start_node_index"][vehicle] * node_count + dropoff
+                        ]
+                    )
+                    max_ride = onboard["max_ride_time_ms"][row]
+                    if (
+                        max_ride is not None
+                        and arrival > onboard["pickup_departure_time_ms"][row] + max_ride
+                    ):
+                        expired += 1
+                    finish = arrival + onboard["dropoff_service_time_ms"][row]
+                    end_node = vehicles["end_node_index"][vehicle]
+                    if end_node is not None:
+                        finish += travel["travel_time_ms"][dropoff * node_count + end_node]
+                    if finish > vehicles["shift_end_time_ms"][vehicle]:
+                        unreachable += 1
+                if expired:
+                    errors.append(
+                        f"{onboard_id}: {expired} onboard rider(s) cannot reach drop-off "
+                        "within max_ride_time_ms"
+                    )
+                if unreachable:
+                    errors.append(
+                        f"{onboard_id}: {unreachable} onboard rider(s) cannot be dropped "
+                        "off within the assigned vehicle's shift"
+                    )
         elif any(vehicles["initial_load"]):
             errors.append(f"{relative_manifest}: fleet has load but no onboard_requests component")
 

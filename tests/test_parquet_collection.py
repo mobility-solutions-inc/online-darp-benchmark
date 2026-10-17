@@ -1338,6 +1338,57 @@ def test_start_node_seat_release_ignores_unrelated_departures(tmp_path: Path) ->
     assert validate_collection(tmp_path)["valid"] is True
 
 
+def _riders_departing_start_at_100s(**overrides: object) -> list[dict[str, object]]:
+    return [
+        _onboard_request(
+            onboard_request_index=index,
+            onboard_request_id=f"onboard-{index}",
+            dropoff_node_index=0,
+            earliest_pickup_time_ms=100_000,
+            pickup_time_ms=100_000,
+            pickup_departure_time_ms=100_000,
+            **overrides,
+        )
+        for index in range(2)
+    ]
+
+
+@pytest.mark.parametrize("shift_end", [150_000, 160_000])
+def test_start_node_dropoffs_wait_for_each_departure(tmp_path: Path, shift_end: int) -> None:
+    # Both riders alight at the start after departing at 100 s; their 30 s services
+    # run back to back and end at 160 s, even though each alone ends at 130 s.
+    _write_collection(
+        tmp_path,
+        vehicle_overrides={"initial_load": 2, "shift_end_time_ms": shift_end},
+        request_overrides={"dropoff_node_index": 0},
+        onboard_requests=_riders_departing_start_at_100s(dropoff_service_time_ms=30_000),
+    )
+    if shift_end >= 160_000:
+        assert validate_collection(tmp_path)["valid"] is True
+        return
+    with pytest.raises(CollectionValidationError) as error:
+        validate_collection(tmp_path)
+    assert "cannot drop off all onboard riders" in str(error.value)
+    assert "within its shift and limits" in str(error.value)
+
+
+def test_multi_party_start_node_seat_release_waits_for_departures(tmp_path: Path) -> None:
+    # A two-seat pickup at the start needs both riders to alight, which cannot
+    # happen before they depart at 100 s, after the 50 s latest pickup.
+    _write_collection(
+        tmp_path,
+        vehicle_overrides={"seat_capacity": 2, "initial_load": 2},
+        request_overrides={
+            "party_size": 2,
+            "dropoff_node_index": 0,
+            "latest_pickup_time_ms": 50_000,
+        },
+        onboard_requests=_riders_departing_start_at_100s(),
+    )
+    with pytest.raises(CollectionValidationError, match="within its shift and limits"):
+        validate_collection(tmp_path)
+
+
 def _add_orphan(root: Path, role: str, rows: list[dict[str, object]]) -> None:
     collection = yaml.safe_load((root / "collection.yaml").read_text())
     file_record = write_parquet(

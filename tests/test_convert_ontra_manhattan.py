@@ -16,7 +16,10 @@ from online_darp_benchmark.convert_ontra_manhattan import (
     ROUTING_RESUME_FILENAME,
     convert,
 )
-from online_darp_benchmark.parquet_collection import validate_collection
+from online_darp_benchmark.parquet_collection import (
+    OGC_CRS84_PROJJSON,
+    validate_collection,
+)
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -160,6 +163,12 @@ def test_convert_ontra_manhattan_round_trip(tmp_path: Path) -> None:
         output / "tables/networks/pool25-graphhopper-car-x1p4/nodes.parquet"
     ).to_pydict()
     assert "tlc-zone-010-pool-01" in nodes["node_id"]
+    geo = json.loads(
+        pq.read_schema(
+            output / "tables/networks/pool25-graphhopper-car-x1p4/nodes.parquet"
+        ).metadata[b"geo"]
+    )
+    assert geo["columns"]["geometry"]["crs"] == OGC_CRS84_PROJJSON
 
     matrix_files = collection["artifacts"][
         "ontra-manhattan-tlc-2025-01-22-v1.pool25-graphhopper-car-x1p4.nodes.travel-times"

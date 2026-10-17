@@ -18,6 +18,7 @@ import pyarrow.parquet as pq
 
 from .parquet_collection import (
     FORMAT_VERSION,
+    OGC_CRS84_PROJJSON,
     SCHEMA_VERSION,
     SORT_KEYS,
     artifact_record,
@@ -707,7 +708,7 @@ def convert(
         role="nodes",
         source_sha256=[pool_sha, requests_sha, historical_fleet_sha],
         spatial_profile="geographic",
-        crs="OGC:CRS84",
+        crs=OGC_CRS84_PROJJSON,
     )
     travel_id = _write_travel_matrix(
         output,
@@ -926,7 +927,7 @@ def convert(
     collection = {
         "format_version": FORMAT_VERSION,
         "collection_id": COLLECTION_ID,
-        "collection_version": "1.0.0-draft.1",
+        "collection_version": "1.0.0-draft.2",
         "source": {
             "source_id": "ontra-manhattan-tlc",
             "source_release": SOURCE_RELEASE,

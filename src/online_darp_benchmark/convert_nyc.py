@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 from .parquet_collection import (
     FORMAT_VERSION,
+    OGC_CRS84_PROJJSON,
     artifact_record,
     dump_yaml,
     physical_problem_sha256,
@@ -161,7 +162,7 @@ def _network(source: Path, output: Path, artifacts: dict[str, Any]) -> dict[str,
         role="nodes",
         source_sha256=node_sha,
         spatial_profile="geographic",
-        crs="OGC:CRS84",
+        crs=OGC_CRS84_PROJJSON,
     )
 
     matrix_source = network_root / "edge_time_matrix.txt"
@@ -598,7 +599,7 @@ def convert(source: Path, output: Path, converter_version: str) -> dict[str, Any
     collection = {
         "format_version": FORMAT_VERSION,
         "collection_id": COLLECTION_ID,
-        "collection_version": "1.0.0-draft.1",
+        "collection_version": "1.0.0-draft.2",
         "source": {
             "source_id": "nyc-darp",
             "source_release": SOURCE_RELEASE,

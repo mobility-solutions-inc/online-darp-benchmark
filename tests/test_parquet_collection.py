@@ -1,11 +1,15 @@
+import json
 from pathlib import Path
 
 import pyarrow.parquet as pq
 import pytest
+import yaml
 
 from online_darp_benchmark.parquet_collection import (
     FORMAT_VERSION,
+    OGC_CRS84_PROJJSON,
     CollectionValidationError,
+    _geo_metadata_errors,
     artifact_record,
     dump_yaml,
     physical_problem_sha256,
@@ -14,7 +18,13 @@ from online_darp_benchmark.parquet_collection import (
 )
 
 
-def _write_collection(tmp_path: Path, **vehicle_overrides: object) -> None:
+def _write_collection(
+    tmp_path: Path,
+    *,
+    vehicle_overrides: dict[str, object] | None = None,
+    request_overrides: dict[str, object] | None = None,
+    travel_time_rows: int | None = None,
+) -> None:
     collection_id = "test-collection"
     artifacts = {}
     components = {}
@@ -76,7 +86,10 @@ def _write_collection(tmp_path: Path, **vehicle_overrides: object) -> None:
             for destination in range(2)
         ],
     }
-    tables["vehicles"][0].update(vehicle_overrides)
+    tables["vehicles"][0].update(vehicle_overrides or {})
+    tables["requests"][0].update(request_overrides or {})
+    if travel_time_rows is not None:
+        tables["travel_times"] = tables["travel_times"][:travel_time_rows]
     for role, rows in tables.items():
         artifact_id = f"test.{role}"
         path = tmp_path / "tables" / f"{role}.parquet"
@@ -149,6 +162,64 @@ def test_reference_writer_and_validator_round_trip(tmp_path: Path) -> None:
 def test_validator_rejects_invalid_vehicle_availability(
     tmp_path: Path, vehicle_overrides: dict[str, int], expected_error: str
 ) -> None:
-    _write_collection(tmp_path, **vehicle_overrides)
+    _write_collection(tmp_path, vehicle_overrides=vehicle_overrides)
     with pytest.raises(CollectionValidationError, match=expected_error):
         validate_collection(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("request_overrides", "expected_error"),
+    [
+        ({"earliest_pickup_time_ms": -1}, "negative earliest pickup time"),
+        ({"pickup_service_time_ms": -1}, "negative service time"),
+        ({"dropoff_service_time_ms": -1}, "negative service time"),
+        ({"max_ride_time_ms": 0}, "nonpositive maximum ride time"),
+    ],
+)
+def test_validator_rejects_invalid_request_timing(
+    tmp_path: Path, request_overrides: dict[str, int], expected_error: str
+) -> None:
+    _write_collection(tmp_path, request_overrides=request_overrides)
+    with pytest.raises(CollectionValidationError, match=expected_error):
+        validate_collection(tmp_path)
+
+
+def test_validator_reports_short_matrix_without_crashing(tmp_path: Path) -> None:
+    _write_collection(tmp_path, travel_time_rows=3)
+    with pytest.raises(CollectionValidationError, match="not K squared"):
+        validate_collection(tmp_path)
+
+
+@pytest.mark.parametrize("escape", ["outside", "absolute"])
+def test_validator_rejects_paths_outside_collection_root(
+    tmp_path: Path, escape: str
+) -> None:
+    root = tmp_path / "collection"
+    _write_collection(root)
+    collection = yaml.safe_load((root / "collection.yaml").read_text())
+    file_record = collection["artifacts"]["test.requests"]["files"][0]
+    outside = tmp_path / "requests.parquet"
+    (root / file_record["path"]).rename(outside)
+    file_record["path"] = (
+        "../requests.parquet" if escape == "outside" else outside.as_posix()
+    )
+    dump_yaml(root / "collection.yaml", collection)
+
+    with pytest.raises(CollectionValidationError, match="escapes collection root"):
+        validate_collection(root)
+
+
+def test_geographic_metadata_requires_projjson_crs() -> None:
+    def metadata(crs: object) -> dict[bytes, bytes]:
+        geo = {
+            "version": "1.1.0",
+            "primary_column": "geometry",
+            "columns": {"geometry": {"encoding": "WKB", "crs": crs}},
+        }
+        return {b"geo": json.dumps(geo).encode()}
+
+    assert _geo_metadata_errors(metadata(OGC_CRS84_PROJJSON)) == []
+    assert _geo_metadata_errors(metadata("OGC:CRS84")) == [
+        "GeoParquet crs must be an explicit PROJJSON object"
+    ]
+    assert _geo_metadata_errors({}) == ["missing or malformed GeoParquet metadata"]

@@ -18,6 +18,114 @@ import yaml
 
 FORMAT_VERSION = "1.0.0-draft.1"
 SCHEMA_VERSION = "1.0.0-draft.1"
+
+# GeoParquet 1.1 requires `crs` to be PROJJSON. Generated with
+# pyproj.CRS("OGC:CRS84").to_json_dict() (pyproj 3.8.0, PROJ 9.8.1).
+OGC_CRS84_PROJJSON: dict[str, Any] = {
+    "$schema": "https://proj.org/schemas/v0.7/projjson.schema.json",
+    "type": "GeographicCRS",
+    "name": "WGS 84 (CRS84)",
+    "datum_ensemble": {
+        "name": "World Geodetic System 1984 ensemble",
+        "members": [
+            {
+                "name": "World Geodetic System 1984 (Transit)",
+                "id": {
+                    "authority": "EPSG",
+                    "code": 1166
+                }
+            },
+            {
+                "name": "World Geodetic System 1984 (G730)",
+                "id": {
+                    "authority": "EPSG",
+                    "code": 1152
+                }
+            },
+            {
+                "name": "World Geodetic System 1984 (G873)",
+                "id": {
+                    "authority": "EPSG",
+                    "code": 1153
+                }
+            },
+            {
+                "name": "World Geodetic System 1984 (G1150)",
+                "id": {
+                    "authority": "EPSG",
+                    "code": 1154
+                }
+            },
+            {
+                "name": "World Geodetic System 1984 (G1674)",
+                "id": {
+                    "authority": "EPSG",
+                    "code": 1155
+                }
+            },
+            {
+                "name": "World Geodetic System 1984 (G1762)",
+                "id": {
+                    "authority": "EPSG",
+                    "code": 1156
+                }
+            },
+            {
+                "name": "World Geodetic System 1984 (G2139)",
+                "id": {
+                    "authority": "EPSG",
+                    "code": 1309
+                }
+            },
+            {
+                "name": "World Geodetic System 1984 (G2296)",
+                "id": {
+                    "authority": "EPSG",
+                    "code": 1383
+                }
+            }
+        ],
+        "ellipsoid": {
+            "name": "WGS 84",
+            "semi_major_axis": 6378137,
+            "inverse_flattening": 298.257223563
+        },
+        "accuracy": "2.0",
+        "id": {
+            "authority": "EPSG",
+            "code": 6326
+        }
+    },
+    "coordinate_system": {
+        "subtype": "ellipsoidal",
+        "axis": [
+            {
+                "name": "Geodetic longitude",
+                "abbreviation": "Lon",
+                "direction": "east",
+                "unit": "degree"
+            },
+            {
+                "name": "Geodetic latitude",
+                "abbreviation": "Lat",
+                "direction": "north",
+                "unit": "degree"
+            }
+        ]
+    },
+    "scope": "Not known.",
+    "area": "World.",
+    "bbox": {
+        "south_latitude": -90,
+        "west_longitude": -180,
+        "north_latitude": 90,
+        "east_longitude": 180
+    },
+    "id": {
+        "authority": "OGC",
+        "code": "CRS84"
+    }
+}
 ROW_GROUP_SIZE = 1_048_576
 
 REQUESTS_SCHEMA = pa.schema(
@@ -162,7 +270,7 @@ def _file_metadata(
     collection_id: str,
     artifact_id: str,
     spatial_profile: str | None,
-    crs: Mapping[str, Any] | str | None,
+    crs: Mapping[str, Any] | None,
 ) -> dict[bytes, bytes]:
     metadata = {
         b"online_darp.format_version": FORMAT_VERSION.encode(),
@@ -172,6 +280,8 @@ def _file_metadata(
         b"online_darp.artifact_id": artifact_id.encode(),
     }
     if schema_name == "nodes" and spatial_profile == "geographic":
+        if not isinstance(crs, Mapping):
+            raise TypeError("geographic nodes require a PROJJSON crs object")
         geo = {
             "version": "1.1.0",
             "primary_column": "geometry",
@@ -195,7 +305,7 @@ def write_parquet(
     collection_id: str,
     artifact_id: str,
     spatial_profile: str | None = None,
-    crs: Mapping[str, Any] | str | None = None,
+    crs: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Write one deterministic-profile Parquet artifact and return its file record."""
 
@@ -296,6 +406,29 @@ def _check_contiguous(values: list[int], label: str, errors: list[str]) -> None:
         errors.append(f"{label} must be sorted, contiguous, and zero-based")
 
 
+def _package_path(root: Path, relative_path: str) -> Path | None:
+    """Resolve a manifest path, or return None if it escapes the package root."""
+
+    if Path(relative_path).is_absolute():
+        return None
+    path = (root / relative_path).resolve()
+    return path if path.is_relative_to(root.resolve()) else None
+
+
+def _geo_metadata_errors(metadata: Mapping[bytes, bytes]) -> list[str]:
+    try:
+        geo = json.loads(metadata[b"geo"])
+        column = geo["columns"][geo["primary_column"]]
+    except (KeyError, TypeError, json.JSONDecodeError):
+        return ["missing or malformed GeoParquet metadata"]
+    errors = []
+    if geo.get("version") != "1.1.0" or column.get("encoding") != "WKB":
+        errors.append("GeoParquet metadata must be version 1.1.0 with WKB encoding")
+    if not isinstance(column.get("crs"), dict):
+        errors.append("GeoParquet crs must be an explicit PROJJSON object")
+    return errors
+
+
 def _artifact_table(
     root: Path,
     collection: Mapping[str, Any],
@@ -308,7 +441,10 @@ def _artifact_table(
         return None
     tables: list[pa.Table] = []
     for file_record in artifact["files"]:
-        path = root / file_record["path"]
+        path = _package_path(root, file_record["path"])
+        if path is None:
+            errors.append(f"artifact path escapes collection root: {file_record['path']}")
+            continue
         if not path.is_file():
             errors.append(f"missing artifact file: {file_record['path']}")
             continue
@@ -328,6 +464,11 @@ def _artifact_table(
         for key, expected in required_metadata.items():
             if metadata.get(key) != expected:
                 errors.append(f"metadata mismatch for {key.decode()}: {file_record['path']}")
+        if artifact.get("spatial_profile") == "geographic":
+            errors.extend(
+                f"{message}: {file_record['path']}"
+                for message in _geo_metadata_errors(metadata)
+            )
         table = parquet_file.read()
         if table.num_rows != file_record["row_count"]:
             errors.append(f"row count mismatch: {file_record['path']}")
@@ -362,7 +503,10 @@ def validate_collection(root: Path) -> dict[str, Any]:
     checked_relationships: set[tuple[str, ...]] = set()
 
     for relative_manifest in collection.get("instances", []):
-        manifest_path = root / relative_manifest
+        manifest_path = _package_path(root, relative_manifest)
+        if manifest_path is None:
+            errors.append(f"instance manifest escapes collection root: {relative_manifest}")
+            continue
         if not manifest_path.is_file():
             errors.append(f"missing instance manifest: {relative_manifest}")
             continue
@@ -404,6 +548,18 @@ def validate_collection(root: Path) -> dict[str, Any]:
             checked_relationships.add(request_semantics_key)
             if any(value < 1 for value in requests["party_size"]):
                 errors.append(f"{request_id}: party_size below one")
+            if any(value < 0 for value in requests["earliest_pickup_time_ms"]):
+                errors.append(f"{request_id}: negative earliest pickup time")
+            if any(
+                value < 0
+                for value in requests["pickup_service_time_ms"]
+                + requests["dropoff_service_time_ms"]
+            ):
+                errors.append(f"{request_id}: negative service time")
+            if any(
+                value is not None and value < 1 for value in requests["max_ride_time_ms"]
+            ):
+                errors.append(f"{request_id}: nonpositive maximum ride time")
             for row in range(len(requests["request_index"])):
                 for lower_name, upper_name in (
                     ("earliest_pickup_time_ms", "latest_pickup_time_ms"),
@@ -473,12 +629,12 @@ def validate_collection(root: Path) -> dict[str, Any]:
                             f"{relative_manifest}: travel matrix keys are incomplete or unsorted"
                         )
                         break
+                for index in range(node_count):
+                    if travel["travel_time_ms"][index * node_count + index] != 0:
+                        errors.append(f"{relative_manifest}: nonzero travel matrix diagonal")
+                        break
             if any(value < 0 for value in travel["travel_time_ms"]):
                 errors.append(f"{relative_manifest}: negative travel time")
-            for index in range(node_count):
-                if travel["travel_time_ms"][index * node_count + index] != 0:
-                    errors.append(f"{relative_manifest}: nonzero travel matrix diagonal")
-                    break
 
         request_nodes_key = ("request-nodes", request_id, components["nodes"])
         if request_nodes_key not in checked_relationships:

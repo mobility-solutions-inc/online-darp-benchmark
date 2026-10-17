@@ -347,7 +347,8 @@ The instance selects exactly one spatial profile:
 - `abstract_cartesian`: non-null `x` and `y` `float64` columns plus an explicit
   coordinate unit in the manifest; or
 - `geographic`: a non-null Point `geometry` column encoded as WKB under
-  GeoParquet 1.1.0, with an explicit CRS. The `.parquet` extension and
+  GeoParquet 1.1.0, with an explicit CRS serialized as a PROJJSON object, as
+  GeoParquet requires (for example, `OGC:CRS84`). The `.parquet` extension and
   `application/vnd.apache.parquet` media type are used.
 
 Coordinates are descriptive. The travel-time table remains authoritative for

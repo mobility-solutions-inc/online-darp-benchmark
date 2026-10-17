@@ -2,6 +2,20 @@
 
 All notable benchmark and tooling changes are recorded here.
 
+## [Unreleased]
+
+### Added
+
+- Required result fields for public-code availability and a validated direct
+  source link when code is available.
+- Proposed confidential hidden-instance intake, isolated staging, access-ledger,
+  and public opaque-registry contracts.
+- Result standing classifications for official, contributor-reference, and
+  unofficial submissions, including disclosed algorithm teams and standing
+  hidden-access conflict checks.
+- A permanent machine-readable restriction making code authored or controlled
+  by Connor Riley ineligible for official hidden-instance results.
+
 ## [0.1.0] - 2026-08-27
 
 ### Added
@@ -13,4 +27,3 @@ All notable benchmark and tooling changes are recorded here.
 - Initial GitHub Pages documentation.
 
 [0.1.0]: https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/tag/v0.1.0
-

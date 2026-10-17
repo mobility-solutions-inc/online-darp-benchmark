@@ -18,3 +18,8 @@ report. We aim to acknowledge a report within five business days.
 Data-quality, benchmark leakage, privacy, and license problems that could harm
 participants may also be reported privately through this channel.
 
+Ordinary hidden-instance submissions are not vulnerability reports. Start with
+the hidden-instance intake route in [CONTRIBUTING.md](CONTRIBUTING.md). Use the
+security channel if hidden data or credentials were exposed, an unauthorized
+person gained access, or the submission itself involves an urgent privacy or
+security risk.

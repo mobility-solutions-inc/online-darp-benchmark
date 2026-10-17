@@ -12,7 +12,7 @@ It combines small instances with objective-specific, certified offline
 references and large instances that test operational scale.
 
 This repository is in its **v0.1 incubation phase**. It defines the benchmark
-contract, contribution process, schemas, examples, and public source registry.
+contract, contribution process, schemas, examples, and source registry.
 The source datasets are not yet redistributed here; each complete pinned release
 will be imported only after its license, provenance, and checksums are recorded.
 
@@ -59,6 +59,7 @@ Each completed run reports individual values rather than an aggregate rank:
 | Stability | reassignments, promise changes, post-acceptance rejections |
 | Computation | decision latency, timeout count, wall time, memory |
 | Feasibility | capacity, time-window, ride-time, and route violations |
+| Reproducibility | public-code availability/link, algorithm artifact, solver and environment disclosures |
 
 The full metric definitions and execution rules live in
 [BENCHMARK_CARD.md](BENCHMARK_CARD.md).
@@ -66,7 +67,7 @@ The full metric definitions and execution rules live in
 ## Repository layout
 
 ```text
-schemas/       Versioned instance, result, and event-log contracts
+schemas/       Versioned public/hidden instance, result, and event contracts
 templates/     Commented templates for new submissions
 examples/      Small schema-valid examples
 manifests/     Public source and benchmark-suite registries
@@ -82,6 +83,9 @@ Python 3.11 or newer is required.
 ```bash
 python -m pip install -e '.[dev]'
 odb-validate instance examples/instance.yaml
+odb-validate hidden-instance examples/hidden-instance-submission.yaml
+odb-validate hidden-access-ledger examples/hidden-access-ledger.yaml
+odb-validate hidden-suite-registry manifests/hidden-suites.yaml
 odb-validate result examples/result.yaml
 odb-validate events examples/event-log.jsonl
 pytest
@@ -90,8 +94,11 @@ pytest
 ## Contribute
 
 New public instances and benchmark results are welcome through pull requests.
-Start with [CONTRIBUTING.md](CONTRIBUTING.md) and use the matching pull-request
-template. Changes to benchmark semantics follow the process in
+Confidential hidden instances use a metadata-minimal intake request followed by
+an isolated private staging repository—never a public pull request. Hidden-data
+contributors may submit clearly labeled reference results, but those results are
+not official. Start with [CONTRIBUTING.md](CONTRIBUTING.md). Changes to benchmark
+semantics follow the process in
 [GOVERNANCE.md](GOVERNANCE.md).
 
 ## License and citation
@@ -102,4 +109,3 @@ relicense them. Cite this benchmark using [CITATION.cff](CITATION.cff), and cite
 each source dataset used in an experiment.
 
 Project site: <https://mobility-solutions-inc.github.io/online-darp-benchmark/>
-

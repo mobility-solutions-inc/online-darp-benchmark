@@ -44,7 +44,6 @@ currently redistributed while licensing, provenance, and checksums are audited.
 ## Participate
 
 - [Read the full benchmark contract on GitHub](https://github.com/mobility-solutions-inc/online-darp-benchmark/blob/main/BENCHMARK_CARD.md)
-- [Submit a public instance or benchmark result](submit.html)
+- [Submit a public or hidden instance, or a benchmark result](submit.html)
 - [Browse the schemas](https://github.com/mobility-solutions-inc/online-darp-benchmark/tree/main/schemas)
 - [Follow the roadmap](https://github.com/mobility-solutions-inc/online-darp-benchmark/blob/main/ROADMAP.md)
-

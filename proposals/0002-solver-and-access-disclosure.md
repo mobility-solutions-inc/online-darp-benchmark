@@ -1,9 +1,10 @@
 # RFC-0002: Solver and Access Disclosure
 
-- Status: Draft
+- Status: Accepted
 - Created: 2026-08-27
+- Accepted: 2026-10-17
 - Discussion: [Issue #5](https://github.com/mobility-solutions-inc/online-darp-benchmark/issues/5)
-- Proposed result schema version: `0.4.0`
+- Result schema version: `0.4.0`
 
 ## Summary
 
@@ -172,3 +173,10 @@ public submissions yet, so the synthetic example and result template can migrate
 without invalidating scientific results. If accepted, the repository should add
 scorecard rendering and filters before accepting v1 submissions.
 
+## Decision
+
+Accepted on 2026-10-17 by the maintainer after the issue was open longer than the
+14-day minimum. The result schema `0.4.0` and validator in this change enforce
+it. Under the single-maintainer incubation rule in
+[GOVERNANCE.md](../GOVERNANCE.md), this acceptance cannot define a stable v1
+release until an independent review is recorded here.

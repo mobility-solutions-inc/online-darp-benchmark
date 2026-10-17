@@ -302,6 +302,9 @@ def convert(
     instance_paths: list[str] = []
     source_checksums: list[tuple[str, str]] = []
     static_paths_by_family = _static_paths(source, enforce_pins)
+    license_source = source / "LICENSE"
+    if not license_source.is_file():
+        raise FileNotFoundError(f"Eccel source license is required: {license_source}")
 
     for source_family, normalized_family in FAMILIES.items():
         dynamic_root = _source_pair_root(source, source_family) / "json_dynamic_instances"
@@ -419,11 +422,9 @@ def convert(
             dump_yaml(output / relative_manifest, instance)
             instance_paths.append(relative_manifest)
 
-    license_source = source / "LICENSE"
-    if license_source.is_file():
-        license_target = output / "LICENSES" / "eccel-source-MIT.txt"
-        license_target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(license_source, license_target)
+    license_target = output / "LICENSES" / "eccel-source-MIT.txt"
+    license_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(license_source, license_target)
     (output / "citations.bib").write_text(CITATIONS_BIB, encoding="utf-8")
     checksum_text = "".join(f"{digest}  {path}\n" for digest, path in source_checksums)
     provenance_root = output / "provenance"

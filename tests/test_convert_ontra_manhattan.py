@@ -184,13 +184,24 @@ def test_convert_ontra_manhattan_round_trip(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    ("resumed_config_sha256", "truncate_first_shard", "expected_resumed_routes"),
-    [("1" * 64, False, 0), ("2" * 64, False, 20), ("1" * 64, True, 8)],
+    (
+        "resumed_config_sha256",
+        "resumed_converter_version",
+        "truncate_first_shard",
+        "expected_resumed_routes",
+    ),
+    [
+        ("1" * 64, "test-version", False, 0),
+        ("2" * 64, "test-version", False, 20),
+        ("1" * 64, "test-version-2", False, 20),
+        ("1" * 64, "test-version", True, 8),
+    ],
 )
 def test_interrupted_conversion_reuses_only_matching_routing_shards(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     resumed_config_sha256: str,
+    resumed_converter_version: str,
     truncate_first_shard: bool,
     expected_resumed_routes: int,
 ) -> None:
@@ -203,11 +214,11 @@ def test_interrupted_conversion_reuses_only_matching_routing_shards(
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
 
-    def run(graphhopper_config_sha256: str) -> None:
+    def run(graphhopper_config_sha256: str, converter_version: str = "test-version") -> None:
         convert(
             source,
             output,
-            "test-version",
+            converter_version,
             graphhopper_url=f"http://127.0.0.1:{server.server_port}",
             osm_pbf_sha256="0" * 64,
             graphhopper_build="test-build",
@@ -232,7 +243,7 @@ def test_interrupted_conversion_reuses_only_matching_routing_shards(
             shard.write_bytes(shard.read_bytes()[: shard.stat().st_size // 2])
 
         _GraphHopperHandler.route_count = 0
-        run(resumed_config_sha256)
+        run(resumed_config_sha256, resumed_converter_version)
     finally:
         server.shutdown()
         server.server_close()

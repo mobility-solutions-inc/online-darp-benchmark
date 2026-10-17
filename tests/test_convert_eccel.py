@@ -46,3 +46,13 @@ def test_converter_rejects_source_contents_that_differ_from_pin(tmp_path: Path) 
     with pytest.raises(ValueError, match="do not match the pinned"):
         convert(source, output, "test-version")
     assert not output.exists()
+
+
+def test_converter_requires_source_license(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    output = tmp_path / "collection"
+    _source_fixture(source)
+
+    with pytest.raises(FileNotFoundError, match="license is required"):
+        convert(source, output, "test-version", enforce_pins=False)
+    assert not output.exists()

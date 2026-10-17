@@ -231,6 +231,10 @@ SCHEMAS = {
     "travel_times": TRAVEL_TIMES_SCHEMA,
 }
 
+REQUIRED_INSTANCE_ROLES = frozenset(
+    {"requests", "reveal_times", "vehicles", "nodes", "travel_times"}
+)
+
 SORT_KEYS = {
     "requests": ["request_index"],
     "reveal_times": ["request_index"],
@@ -658,60 +662,76 @@ def _requests_outside_fleet_shifts(
 ) -> int:
     """Count requests that no vehicle can serve alone within its shift and limits.
 
-    A vehicle qualifies if it has enough seats, starts by the latest pickup, and
-    can finish pickup service, direct travel, and drop-off service within both
-    its shift and its maximum route duration. This is a necessary condition: it
-    ignores travel to the pickup and to the terminal, so it never rejects a
-    request that some vehicle could serve.
+    A vehicle qualifies if it has enough seats, can travel from its start node
+    to reach the pickup by the latest pickup time, and can then finish pickup
+    service, direct travel, drop-off service, and travel to its terminal (if
+    any) within its shift and maximum route duration. Onboard passengers and
+    other requests are ignored, so this never rejects a request that the
+    vehicle could serve on its own.
     """
 
-    pair_index = pc.add(
-        pc.multiply(pc.cast(requests["pickup_node_index"], pa.int64()), node_count),
-        pc.cast(requests["dropoff_node_index"], pa.int64()),
-    )
+    times = travel["travel_time_ms"]
+    pickup = pc.cast(requests["pickup_node_index"], pa.int64())
+    dropoff = pc.cast(requests["dropoff_node_index"], pa.int64())
     busy = pc.add(
-        pc.add(requests["pickup_service_time_ms"], pc.take(travel["travel_time_ms"], pair_index)),
+        pc.add(
+            requests["pickup_service_time_ms"],
+            pc.take(times, pc.add(pc.multiply(pickup, node_count), dropoff)),
+        ),
         requests["dropoff_service_time_ms"],
     )
     remaining = pa.table(
         {
+            "pickup": pickup,
+            "dropoff": dropoff,
             "party_size": requests["party_size"],
             "earliest": requests["earliest_pickup_time_ms"],
             "latest": requests["latest_pickup_time_ms"],
             "busy": busy,
         }
     )
-    shifts = set(
+    vehicle_groups = set(
         zip(
-            vehicles["seat_capacity"].to_pylist(),
-            vehicles["shift_start_time_ms"].to_pylist(),
-            vehicles["shift_end_time_ms"].to_pylist(),
-            vehicles["max_route_duration_ms"].to_pylist(),
+            *(
+                vehicles[name].to_pylist()
+                for name in (
+                    "seat_capacity",
+                    "start_node_index",
+                    "end_node_index",
+                    "shift_start_time_ms",
+                    "shift_end_time_ms",
+                    "max_route_duration_ms",
+                )
+            ),
             strict=True,
         )
     )
     # Most permissive shifts first, so later groups only see the few requests left.
-    for capacity, start, end, max_duration in sorted(
-        shifts,
-        key=lambda shift: (shift[1], -shift[2], shift[3] is not None, -(shift[3] or 0), -shift[0]),
+    for capacity, start_node, end_node, shift_start, shift_end, max_duration in sorted(
+        vehicle_groups,
+        key=lambda group: (group[3], -group[4], group[5] is not None, -group[0]),
     ):
         if remaining.num_rows == 0:
             break
+        to_pickup = pc.take(times, pc.add(remaining["pickup"], start_node * node_count))
+        arrival = pc.max_element_wise(pc.add(to_pickup, shift_start), remaining["earliest"])
+        finish = pc.add(arrival, remaining["busy"])
+        driving = pc.add(to_pickup, remaining["busy"])
+        if end_node is not None:
+            to_end = pc.take(
+                times, pc.add(pc.multiply(remaining["dropoff"], node_count), end_node)
+            )
+            finish = pc.add(finish, to_end)
+            driving = pc.add(driving, to_end)
         served = pc.and_(
             pc.and_(
                 pc.less_equal(remaining["party_size"], capacity),
-                pc.fill_null(pc.greater_equal(remaining["latest"], start), True),
+                pc.fill_null(pc.less_equal(arrival, remaining["latest"]), True),
             ),
-            pc.less_equal(
-                pc.add(
-                    pc.max_element_wise(remaining["earliest"], pa.scalar(start, pa.int64())),
-                    remaining["busy"],
-                ),
-                end,
-            ),
+            pc.less_equal(finish, shift_end),
         )
         if max_duration is not None:
-            served = pc.and_(served, pc.less_equal(remaining["busy"], max_duration))
+            served = pc.and_(served, pc.less_equal(driving, max_duration))
         remaining = remaining.filter(pc.invert(served))
     return remaining.num_rows
 
@@ -788,7 +808,11 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
                 f"{instance.get('format_version')}"
             )
             continue
-        components = instance.get("components", {})
+        components = instance.get("components") or {}
+        missing_roles = sorted(REQUIRED_INSTANCE_ROLES - set(components))
+        if missing_roles:
+            errors.append(f"{relative_manifest}: missing components {', '.join(missing_roles)}")
+            continue
         values = {role: dictionaries.get(artifact_id) for role, artifact_id in components.items()}
         if any(value is None for value in values.values()):
             errors.append(f"{relative_manifest}: unresolved component")
@@ -908,10 +932,12 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
                 errors.append(f"{fleet_id}: nonpositive maximum route duration")
 
         shift_key = ("request-shifts", request_id, fleet_id, components["travel_times"])
-        request_nodes = pa.chunked_array(
+        referenced_nodes = pa.chunked_array(
             [
                 *cache[request_id]["pickup_node_index"].chunks,
                 *cache[request_id]["dropoff_node_index"].chunks,
+                *cache[fleet_id]["start_node_index"].chunks,
+                *pc.drop_null(cache[fleet_id]["end_node_index"]).chunks,
             ],
             type=pa.int32(),
         )
@@ -920,8 +946,8 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
             and requests["request_index"]
             and vehicles["vehicle_index"]
             and len(travel["travel_time_ms"]) == node_count * node_count
-            and pc.min(request_nodes).as_py() >= 0
-            and pc.max(request_nodes).as_py() < node_count
+            and pc.min(referenced_nodes).as_py() >= 0
+            and pc.max(referenced_nodes).as_py() < node_count
         ):
             checked_relationships.add(shift_key)
             unserved = _requests_outside_fleet_shifts(

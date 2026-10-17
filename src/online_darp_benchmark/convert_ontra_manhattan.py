@@ -371,6 +371,7 @@ def _existing_parquet_record(
 
 
 def _routing_fingerprint(
+    converter_version: str,
     coordinates: list[tuple[float, float]],
     pool_sha256: str,
     shard_origins: int,
@@ -382,6 +383,7 @@ def _routing_fingerprint(
     """Digest every input that determines the routed shard contents."""
 
     inputs = {
+        "converter_version": converter_version,
         "coordinates": coordinates,
         "pool_sha256": pool_sha256,
         "shard_origins": shard_origins,
@@ -410,6 +412,7 @@ def _resumable_routing_fingerprint(path: Path) -> str | None:
 
 
 def _write_travel_matrix(
+    converter_version: str,
     output: Path,
     artifacts: dict[str, Any],
     nodes: list[dict[str, Any]],
@@ -433,10 +436,11 @@ def _write_travel_matrix(
         profile.get("name") for profile in graphhopper_info.get("profiles", [])
     }:
         raise ValueError(f"GraphHopper server does not expose {GRAPHHOPPER_PROFILE!r}")
-    # Existing shards are reused only when an interrupted run recorded the same
-    # routing inputs. The marker stays outside the published collection: convert()
+    # Existing shards are reused only when an interrupted run of the same
+    # converter version recorded the same routing inputs. The marker stays outside the published collection: convert()
     # removes it on success, so shard bytes and checksums are unchanged.
     routing_fingerprint = _routing_fingerprint(
+        converter_version,
         coordinates,
         pool_sha256,
         shard_origins,
@@ -716,6 +720,7 @@ def convert(
         crs=OGC_CRS84_PROJJSON,
     )
     travel_id = _write_travel_matrix(
+        converter_version,
         output,
         artifacts,
         nodes,

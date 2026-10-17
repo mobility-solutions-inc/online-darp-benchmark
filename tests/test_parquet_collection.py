@@ -599,3 +599,30 @@ def test_validator_rejects_branch_artifact_uris(tmp_path: Path, uri: str, valid:
     else:
         with pytest.raises(CollectionValidationError, match="full commit hash"):
             validate_collection(root, fetch_uri=lambda requested: external)
+
+
+@pytest.mark.parametrize(
+    ("vehicle_overrides", "request_overrides"),
+    [
+        ({"start_node_index": 1}, {"latest_pickup_time_ms": 10_000}),
+        ({"shift_end_time_ms": 50_000}, {}),
+        ({"max_route_duration_ms": 50_000}, {}),
+    ],
+)
+def test_serviceability_includes_positioning_travel(
+    tmp_path: Path, vehicle_overrides: dict[str, int], request_overrides: dict[str, int]
+) -> None:
+    _write_collection(
+        tmp_path, vehicle_overrides=vehicle_overrides, request_overrides=request_overrides
+    )
+    with pytest.raises(CollectionValidationError, match="within its shift and limits"):
+        validate_collection(tmp_path)
+
+
+def test_validator_requires_core_instance_components(tmp_path: Path) -> None:
+    _write_collection(tmp_path)
+    instance = yaml.safe_load((tmp_path / "instances/test.yaml").read_text())
+    del instance["components"]["nodes"]
+    dump_yaml(tmp_path / "instances/test.yaml", instance)
+    with pytest.raises(CollectionValidationError, match="missing components nodes"):
+        validate_collection(tmp_path)

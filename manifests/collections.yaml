@@ -37,3 +37,30 @@ collections:
       sha256: af1c09a4ce2ea657f0fa751d474c7c259c76ec50f016ab7b611bc2cbbc6507f4
       mirror_url: https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/download/parquet-data-v1.0.0-draft.1/nyc-darp-v1.0.parquet-draft.1.tar.gz
       canonical_url: null
+  - collection_id: ontra-manhattan-tlc-2025-01-22-v1
+    collection_version: 1.0.0-draft.1
+    source_release: v1.0.0
+    license: CC-BY-4.0 AND ODbL-1.0
+    request_count: 24325
+    node_count: 2750
+    travel_matrix_row_count: 7562500
+    fleet_deployment_count: 4
+    official_fleet_deployment_count: 3
+    supplemental_fleet_deployment_count: 1
+    instance_count: 4
+    artifact_count: 8
+    validation: passed
+    release:
+      tag: ontra-manhattan-tlc-2025-01-22-v1.0.0-draft.1
+      url: https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/tag/ontra-manhattan-tlc-2025-01-22-v1.0.0-draft.1
+    archive:
+      filename: ontra-manhattan-tlc-2025-01-22-v1.parquet-draft.1.tar.gz
+      byte_size: 44825581
+      sha256: 53b3d9ea24b6dfa6650d7557a004094c7f12970eced60d2c5e0d482a31356ec9
+      mirror_url: https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/download/ontra-manhattan-tlc-2025-01-22-v1.0.0-draft.1/ontra-manhattan-tlc-2025-01-22-v1.parquet-draft.1.tar.gz
+      canonical_url: null
+    source_archive:
+      filename: ontra-manhattan-tlc-2025-01-22-v1.source-v1.0.0.tar.gz
+      byte_size: 149162468
+      sha256: 064c9798853394782e1f3036f115b0323c3227b76affc1793946b29182a8e16a
+      mirror_url: https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/download/ontra-manhattan-tlc-2025-01-22-v1.0.0-draft.1/ontra-manhattan-tlc-2025-01-22-v1.source-v1.0.0.tar.gz

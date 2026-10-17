@@ -10,7 +10,6 @@ sources:
     role: small
     problem_families:
       - darp
-      - dpdptw
     canonical_url: https://doi.org/10.5281/zenodo.4107192
     repository_url: https://github.com/renan-eccel/instances-DDARP-DPDPTW
     inclusion_rule: all_applicable_instances
@@ -26,7 +25,8 @@ sources:
       - https://doi.org/10.14295/transportes.v28i4.2412
       - https://doi.org/10.1287/ijoc.1110.0454
     notes: >-
-      Keep DPDPTW as a separately labeled adjacent task. Preserve transitive
+      The upstream repository name includes DPDPTW, but this passenger DARP
+      benchmark includes only the complete DDARP release. Preserve transitive
       citations for the original static instance families.
 
   - source_id: nyc-darp
@@ -55,4 +55,52 @@ sources:
       - https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page
       - https://www.openstreetmap.org/copyright
       - https://github.com/Project-OSRM/osrm-backend
-    notes: Riley_Benchmark is outside the initial two-source suite.
+    notes: Riley_Benchmark is outside the declared public suite.
+
+  - source_id: ontra-manhattan-tlc
+    intended_release: v1.0.0
+    role: large
+    problem_families:
+      - darp
+    canonical_url: https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page
+    repository_url: https://github.com/mobility-solutions-inc/ontra
+    inclusion_rule: full_hour_with_all_declared_fleet_deployments
+    pin:
+      status: confirmed
+      service_date: '2025-01-22'
+      source_archive_filename: ontra-manhattan-tlc-2025-01-22-v1.source-v1.0.0.tar.gz
+      source_archive_byte_size: 149162468
+      source_archive_sha256: 064c9798853394782e1f3036f115b0323c3227b76affc1793946b29182a8e16a
+      generator_commit: 6d4f168a0724a0f0bc7795b57f75fac8cf3010dd
+      graphhopper_commit: 80ed17c5fa3f71175949ee0ad44732391172e03a
+      graphhopper_image_id: sha256:acff212715b0fc13b970da5837d51414e7ed1f9464b6cc35c0c3eb2dcb4228b1
+      graphhopper_config_sha256: ba5138c4beff955a84172d773dbd1b7a0edb3683258653aae1c0ac5537bb4f68
+      graphhopper_index_high_resolution_m: 1000
+      graphhopper_index_max_region_search: 8
+      osm_parent_url_as_retrieved: https://download.geofabrik.de/north-america/us-northeast-latest.osm.pbf
+      osm_parent_replication_timestamp: '2026-08-05T20:21:23Z'
+      osm_parent_extract_sha256: b6e1e3a7865aa2462cc624e267e67e290106b445b6f34e07d7cfb2060e5e543e
+      osm_crop: nyc-routing-20260805.osm.pbf
+      osm_crop_included_in_source_archive: true
+      osm_crop_sha256: 6769faafd0f994abc45d2b7fe3a3f86520d41b33f0d9ee0350b95d800976e245
+      osm_crop_bbox_wgs84: [-74.35, 40.45, -73.65, 41.0]
+      osm_crop_strategy: complete_ways
+      osmium_version: 1.15.0
+    redistribution:
+      status: confirmed
+      license: CC-BY-4.0 AND ODbL-1.0
+      note: >-
+        Retain NYC TLC, Mobility Solutions Inc, OpenStreetMap, Geofabrik, and
+        GraphHopper attribution and applicable data-license notices.
+    citations:
+      - https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page
+      - https://cityofnewyork.github.io/opendatatsm/publicpolicies.html
+      - https://download.geofabrik.de/north-america/us-northeast.html
+      - https://www.openstreetmap.org/copyright
+      - https://github.com/mobility-solutions-inc/graphhopper
+      - https://github.com/mobility-solutions-inc/ontra
+    notes: >-
+      The official suite uses balanced Manhattan fleets of 1,000, 2,000, and
+      4,000 vehicles. The exact surviving 2,000-vehicle Rust-regression fleet is
+      public but supplemental because a later pilot overwrote the original
+      full-hour fleet artifact.

@@ -28,8 +28,8 @@ license and the normalized collection preserves its notice. The imported DDARP
 release is pinned to commit
 `77c301eab45f735734f114fdfefd4da02f19c8b1`; all 68 static/dynamic DDARP pairs
 carry file-level source checksums and transitive citations. DPDPTW remains a
-separately labeled adjacent task and needs a fleet/capacity format extension
-before normalization.
+named part of the upstream repository, but is outside this passenger DARP
+benchmark's scope and is not normalized or scored.
 
 ## NYC-DARP and dynamic-ips
 
@@ -56,6 +56,55 @@ The initial suite includes NYC-DARP only. Other collections present in
 dynamic-ips, including Riley_Benchmark, are not implicitly part of v1. The
 normalizer records the deterministic exclusion of 23 source rows with
 nonpositive passenger counts; it does not silently coerce them into requests.
+
+## Ontra Manhattan TLC 2025-01-22
+
+- Data source: New York City Taxi and Limousine Commission, *TLC Trip Record
+  Data: January 2025*.
+  <https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page>
+- Public-data policies and disclaimers: New York City Open Data.
+  <https://cityofnewyork.github.io/opendatatsm/publicpolicies.html>
+- Road data: Geofabrik and OpenStreetMap contributors, *US Northeast snapshot,
+  replication timestamp 2026-08-05T20:21:23Z*.
+  <https://download.geofabrik.de/north-america/us-northeast.html>
+- Routing engine: Mobility Solutions Inc's GraphHopper fork, commit
+  `80ed17c5fa3f71175949ee0ad44732391172e03a`.
+  <https://github.com/mobility-solutions-inc/graphhopper>
+- Transformation software: Mobility Solutions Inc, *Ontra Manhattan TLC
+  simulation generator*, commit
+  `6d4f168a0724a0f0bc7795b57f75fac8cf3010dd`.
+  <https://github.com/mobility-solutions-inc/ontra>
+
+Redistribution has been confirmed. TLC-derived demand and fleet components are
+released under CC BY 4.0. The GraphHopper road-time matrix retains OpenStreetMap
+Open Database License 1.0 attribution and reuse requirements. Every upstream
+file is pinned by SHA-256 in the collection archive.
+
+The GraphHopper input is a deterministic `osmium-tool` `complete_ways` crop of
+that extract with WGS84 bounding box `[-74.35, 40.45, -73.65, 41.0]`. The
+parent extract, crop, crop tool, and container image are independently pinned;
+the crop is included in the source archive because the upstream `latest` URL is
+mutable.
+
+The released requests are not observed door-to-door passenger trajectories.
+TLC supplies pickup and drop-off taxi zones and times; the generator sampled
+synthetic points inside those zones and remapped them to a frozen routable point
+pool. TLC states that provider-submitted records may be incomplete or inaccurate,
+and no City endorsement is implied.
+
+The complete directed matrix uses GraphHopper 11.0's `car` profile with turn
+costs and contraction hierarchies. Raw milliseconds are truncated to whole
+seconds, multiplied by 1.4, and rounded to the nearest whole second, matching the
+Ontra Rust dispatcher's routing semantics. A 1,000-meter high-resolution
+location index with `index.max_region_search=8` keeps every frozen point
+routable in the compact graph. GraphHopper road distance is retained in
+millimeters.
+
+The exact retained 2,000-vehicle Rust-regression fleet is supplemental. The
+original generator reused a filename, and a later 500-request pilot overwrote
+the fleet generated for the full hour. Three official balanced deployments are
+generated at 1,000, 2,000, and 4,000 vehicles. The benchmark preserves the caveat
+instead of silently rewriting the historical artifact.
 
 ## Reference implementations and values
 

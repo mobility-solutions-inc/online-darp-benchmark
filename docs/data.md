@@ -27,7 +27,13 @@ The RFC-0001 prerelease contains:
   `69aafcc4ac5969b385ecfa611d2a5ed9664b60d8881a05aa4ea293f151cfd4a6`);
 - [NYC-DARP v1.0 Parquet collection](https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/download/parquet-data-v1.0.0-draft.1/nyc-darp-v1.0.parquet-draft.1.tar.gz)
   (96 demand windows, 62 fleets, 150,096,002 bytes, SHA-256
-  `af1c09a4ce2ea657f0fa751d474c7c259c76ec50f016ab7b611bc2cbbc6507f4`).
+  `af1c09a4ce2ea657f0fa751d474c7c259c76ec50f016ab7b611bc2cbbc6507f4`);
+- [Ontra Manhattan TLC 2025-01-22 Parquet collection](https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/download/ontra-manhattan-tlc-2025-01-22-v1.0.0-draft.1/ontra-manhattan-tlc-2025-01-22-v1.parquet-draft.1.tar.gz)
+  (24,325 requests, 4 fleet deployments, 44,825,581 bytes, SHA-256
+  `53b3d9ea24b6dfa6650d7557a004094c7f12970eced60d2c5e0d482a31356ec9`);
+- [Ontra Manhattan TLC reproducibility source](https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/download/ontra-manhattan-tlc-2025-01-22-v1.0.0-draft.1/ontra-manhattan-tlc-2025-01-22-v1.source-v1.0.0.tar.gz)
+  (149,162,468 bytes, SHA-256
+  `064c9798853394782e1f3036f115b0323c3227b76affc1793946b29182a8e16a`).
 
 These are GitHub prerelease mirrors while the DOI-bearing Zenodo record is
 pending. The machine-readable registry is

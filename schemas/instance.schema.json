@@ -23,7 +23,7 @@
       "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
     },
     "title": {"type": "string", "minLength": 1},
-    "problem_family": {"enum": ["darp", "dpdptw"]},
+    "problem_family": {"const": "darp"},
     "tier": {
       "enum": ["exact_classical", "exact_realistic", "bounded_medium", "large_online"]
     },
@@ -153,4 +153,3 @@
     }
   }
 }
-

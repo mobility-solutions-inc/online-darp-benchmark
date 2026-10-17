@@ -405,7 +405,7 @@ def convert(source: Path, output: Path, converter_version: str) -> dict[str, Any
         },
         "scope": {
             "included": "all DDARP instances and paired reveal schedules in Eccel v1.2",
-            "excluded": "DPDPTW adjacent-task instances require a fleet/capacity extension",
+            "excluded": "DPDPTW instances are outside this passenger DARP benchmark's scope",
         },
         "artifacts": artifacts,
         "transformations": [transformation],

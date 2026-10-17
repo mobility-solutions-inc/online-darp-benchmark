@@ -108,20 +108,27 @@ def test_result_rejects_solver_calls_without_solver_component(tmp_path: Path) ->
 
 
 @pytest.mark.parametrize(
-    ("solver", "solver_version", "valid"),
+    ("solver", "solver_version", "component_overrides", "valid"),
     [
-        ("Example Solver", "1.2.3", True),
-        ("example-solver", "1.2.3", True),
-        ("Example Solver", "9.9.9", False),
-        ("Undisclosed Solver", "1.2.3", False),
+        ("Example Solver", "1.2.3", {}, True),
+        ("example-solver", "1.2.3", {}, True),
+        ("Example Solver", "9.9.9", {}, False),
+        ("Undisclosed Solver", "1.2.3", {}, False),
+        ("Example Solver", "1.2.3", {"component_type": "modeling_layer"}, False),
+        ("Example Solver", "1.2.3", {"role": "online_decision"}, False),
     ],
 )
 def test_offline_certificate_must_match_disclosed_component(
-    tmp_path: Path, solver: str, solver_version: str, valid: bool
+    tmp_path: Path,
+    solver: str,
+    solver_version: str,
+    component_overrides: dict[str, str],
+    valid: bool,
 ) -> None:
     document = deepcopy(load_document(ROOT / "examples/result.yaml"))
     component = optimization_component()
     component["role"] = "offline_reference"
+    component.update(component_overrides)
     document["algorithm"]["optimization_stack"] = {
         "uses_external_components": True,
         "components": [component],
@@ -167,6 +174,42 @@ def test_unavailable_solver_metrics_require_notes(
         validate_manifest(path, "result")
     else:
         with pytest.raises(ValidationFailure, match="must explain unavailable"):
+            validate_manifest(path, "result")
+
+
+@pytest.mark.parametrize(
+    ("calls", "wall_time", "limit_hits", "expected_error"),
+    [
+        (1, 0.5, 2, "cannot exceed"),
+        (0, 0.5, 0, "must be zero when external_solver_calls is zero"),
+        (0, 0, 1, "cannot exceed"),
+        (0, 0, 0, None),
+        (2, 0.5, 1, None),
+    ],
+)
+def test_solver_metrics_must_be_consistent(
+    tmp_path: Path,
+    calls: int,
+    wall_time: float,
+    limit_hits: int,
+    expected_error: str | None,
+) -> None:
+    document = deepcopy(load_document(ROOT / "examples/result.yaml"))
+    document["algorithm"]["optimization_stack"] = {
+        "uses_external_components": True,
+        "components": [optimization_component()],
+        "notes": None,
+    }
+    computation = document["metrics"]["computation"]
+    computation["external_solver_calls"] = calls
+    computation["external_solver_wall_time_seconds"] = wall_time
+    computation["external_solver_time_limit_hits"] = limit_hits
+    path = tmp_path / "result.yaml"
+    path.write_text(yaml_dump(document), encoding="utf-8")
+    if expected_error is None:
+        validate_manifest(path, "result")
+    else:
+        with pytest.raises(ValidationFailure, match=expected_error):
             validate_manifest(path, "result")
 
 

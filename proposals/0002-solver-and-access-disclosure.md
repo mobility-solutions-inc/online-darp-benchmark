@@ -162,9 +162,11 @@ The result schema enforces:
 - `private` components are not publicly obtainable;
 - solver-call metrics are zero for a completed run whose stack discloses no
   `solver` component;
-- `metrics.notes` explains any solver-call metric that is `null`; and
-- an offline certificate names a disclosed component, by `name` or
-  `component_id`, with the same version.
+- `metrics.notes` explains any solver-call metric that is `null`;
+- time-limit hits do not exceed solver calls, and zero calls imply zero solver
+  wall time and hits; and
+- an offline certificate names a disclosed `solver` component with role
+  `offline_reference`, by `name` or `component_id`, with the same version.
 
 ## Compatibility and adoption
 

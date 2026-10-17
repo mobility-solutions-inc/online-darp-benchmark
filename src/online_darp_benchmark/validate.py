@@ -164,16 +164,30 @@ def validate_result_semantics(path: Path, document: dict[str, Any]) -> None:
                 "metrics.notes must explain unavailable solver metrics: "
                 + ", ".join(unavailable)
             )
+        calls = computation["external_solver_calls"]
+        wall_time = computation["external_solver_wall_time_seconds"]
+        limit_hits = computation["external_solver_time_limit_hits"]
+        if calls is not None and limit_hits is not None and limit_hits > calls:
+            failures.append(
+                "external_solver_time_limit_hits cannot exceed external_solver_calls"
+            )
+        if calls == 0 and ((wall_time or 0) > 0 or (limit_hits or 0) > 0):
+            failures.append(
+                "external solver wall time and time-limit hits must be zero "
+                "when external_solver_calls is zero"
+            )
 
     certificate = document.get("offline_certificate")
     if certificate is not None and not any(
-        certificate["solver"] in (component["name"], component["component_id"])
+        component["component_type"] == "solver"
+        and component["role"] == "offline_reference"
+        and certificate["solver"] in (component["name"], component["component_id"])
         and certificate["solver_version"] == component["version"]
         for component in stack["components"]
     ):
         failures.append(
             "offline_certificate solver and solver_version must match a disclosed "
-            "optimization_stack component name or component_id and version"
+            "offline_reference solver component by name or component_id and version"
         )
 
     if failures:

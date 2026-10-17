@@ -592,6 +592,12 @@ def _instance_errors(instance: Any, collection_id: Any) -> list[str]:
             errors.append(f"missing components {', '.join(missing)}")
         if unknown := sorted(set(components) - REQUIRED_INSTANCE_ROLES - {"onboard_requests"}):
             errors.append(f"unknown components {', '.join(unknown)}")
+        if invalid := sorted(
+            str(role)
+            for role, artifact_id in components.items()
+            if not isinstance(artifact_id, str) or not artifact_id
+        ):
+            errors.append(f"component artifact IDs must be nonempty strings: {', '.join(invalid)}")
     sections = {}
     for key in ("time", "spatial", "relocation"):
         section = instance.get(key)
@@ -650,6 +656,16 @@ def _manifest_errors(collection: Any) -> list[str]:
             ):
                 if not isinstance(transformation, Mapping) or key not in transformation:
                     errors.append(f"collection.yaml transformations[{index}] missing {key}")
+            if not isinstance(transformation, Mapping) or "code_version" not in transformation:
+                continue
+            code_version = transformation["code_version"]
+            if not (
+                isinstance(code_version, str) and IMMUTABLE_VERSION_PATTERN.fullmatch(code_version)
+            ):
+                errors.append(
+                    f"collection.yaml transformations[{index}] code_version must be a full "
+                    "commit hash or semantic version"
+                )
     if not isinstance(collection.get("instances"), list) or not collection["instances"]:
         errors.append("collection.yaml missing instances")
     elif not all(isinstance(entry, str) and entry for entry in collection["instances"]):
@@ -820,6 +836,16 @@ def _artifact_local_errors(
             or not all(_normal(item) for item in value[id_name])
         ):
             errors.append(f"{artifact_id}: invalid or duplicate {id_name}")
+
+    foreign_keys = {
+        "requests": ("pickup_node_index", "dropoff_node_index"),
+        "vehicles": ("start_node_index", "end_node_index"),
+        "onboard_requests": ("pickup_node_index", "dropoff_node_index", "assigned_vehicle_index"),
+        "travel_times": ("from_node_index", "to_node_index"),
+    }
+    for column in foreign_keys.get(role, ()):
+        if any(item is not None and item < 0 for item in value[column]):
+            errors.append(f"{artifact_id}: negative {column}")
 
     if role == "requests":
         requests = value

@@ -170,7 +170,7 @@ def _write_collection(
                 {
                     "transformation_id": "test",
                     "code_url": "https://example.org/code",
-                    "code_version": "test",
+                    "code_version": "1.0.0",
                     "parameters": {},
                     "random_seed": None,
                     "deterministic": True,
@@ -1336,3 +1336,56 @@ def test_start_node_seat_release_ignores_unrelated_departures(tmp_path: Path) ->
         ],
     )
     assert validate_collection(tmp_path)["valid"] is True
+
+
+def _add_orphan(root: Path, role: str, rows: list[dict[str, object]]) -> None:
+    collection = yaml.safe_load((root / "collection.yaml").read_text())
+    file_record = write_parquet(
+        root / "tables" / f"orphan-{role}.parquet",
+        rows,
+        schema_name=role,
+        collection_id="test-collection",
+        artifact_id=f"test.orphan-{role}",
+    )
+    collection["artifacts"][f"test.orphan-{role}"] = artifact_record(
+        role=role, file_record=file_record, collection_root=root
+    )
+    dump_yaml(root / "collection.yaml", collection)
+
+
+def test_validator_rejects_negative_foreign_keys_in_orphan_artifacts(tmp_path: Path) -> None:
+    _write_collection(tmp_path)
+    requests = pq.read_table(tmp_path / "tables" / "requests.parquet").to_pylist()
+    requests[0]["pickup_node_index"] = -1
+    _add_orphan(tmp_path, "requests", requests)
+    _add_orphan(
+        tmp_path,
+        "travel_times",
+        [{"from_node_index": -1, "to_node_index": -1, "travel_time_ms": 0, "distance_mm": None}],
+    )
+    with pytest.raises(CollectionValidationError) as error:
+        validate_collection(tmp_path)
+    assert "test.orphan-requests: negative pickup_node_index" in str(error.value)
+    assert "test.orphan-travel_times: negative from_node_index" in str(error.value)
+
+
+@pytest.mark.parametrize("code_version", ["main", "abc123", None])
+def test_validator_requires_immutable_transformation_versions(
+    tmp_path: Path, code_version: object
+) -> None:
+    _write_collection(tmp_path)
+    collection = yaml.safe_load((tmp_path / "collection.yaml").read_text())
+    collection["transformations"][0]["code_version"] = code_version
+    dump_yaml(tmp_path / "collection.yaml", collection)
+    with pytest.raises(CollectionValidationError, match="code_version must be"):
+        validate_collection(tmp_path)
+
+
+@pytest.mark.parametrize("artifact_id", [[], "", 3])
+def test_validator_requires_string_component_ids(tmp_path: Path, artifact_id: object) -> None:
+    _write_collection(tmp_path)
+    instance = yaml.safe_load((tmp_path / "instances/test.yaml").read_text())
+    instance["components"]["requests"] = artifact_id
+    dump_yaml(tmp_path / "instances/test.yaml", instance)
+    with pytest.raises(CollectionValidationError, match="component artifact IDs must be"):
+        validate_collection(tmp_path)

@@ -157,11 +157,12 @@ The result schema enforces:
 - `uses_external_components: true` requires at least one component;
 - IDs are unique within the stack;
 - versions, access terms, paid-license use, obtainability, and parameters are
-  explicit; and
-- solver-call metrics agree with an empty stack when the run completed.
-
-Cross-record validation should also reject an offline certificate that names a
-solver absent from the disclosed stack.
+  explicit;
+- `private` components are not publicly obtainable;
+- solver-call metrics are zero for a completed run whose stack discloses no
+  `solver` component; and
+- an offline certificate names a disclosed component, by `name` or
+  `component_id`, with the same version.
 
 ## Compatibility and adoption
 

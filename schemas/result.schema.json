@@ -531,6 +531,13 @@
         "threads": {"type": ["integer", "null"], "minimum": 1},
         "parameters": {"type": "object"},
         "notes": {"type": ["string", "null"]}
+      },
+      "if": {
+        "required": ["access_class"],
+        "properties": {"access_class": {"const": "private"}}
+      },
+      "then": {
+        "properties": {"exact_environment_publicly_obtainable": {"const": false}}
       }
     },
     "horizon": {

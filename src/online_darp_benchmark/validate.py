@@ -143,10 +143,10 @@ def validate_result_semantics(path: Path, document: dict[str, Any]) -> None:
     if len(component_ids) != len(set(component_ids)):
         failures.append("optimization_stack component_id values must be unique")
 
-    if (
-        not stack["uses_external_components"]
-        and document["run"]["run_status"] == "completed"
-    ):
+    uses_external_solver = any(
+        component["component_type"] == "solver" for component in stack["components"]
+    )
+    if not uses_external_solver and document["run"]["run_status"] == "completed":
         computation = document["metrics"]["computation"]
         for field in (
             "external_solver_calls",
@@ -154,7 +154,18 @@ def validate_result_semantics(path: Path, document: dict[str, Any]) -> None:
             "external_solver_time_limit_hits",
         ):
             if computation[field] != 0:
-                failures.append(f"{field} must be zero when no external component is used")
+                failures.append(f"{field} must be zero when no external solver is disclosed")
+
+    certificate = document.get("offline_certificate")
+    if certificate is not None and not any(
+        certificate["solver"] in (component["name"], component["component_id"])
+        and certificate["solver_version"] == component["version"]
+        for component in stack["components"]
+    ):
+        failures.append(
+            "offline_certificate solver and solver_version must match a disclosed "
+            "optimization_stack component name or component_id and version"
+        )
 
     if failures:
         details = "\n".join(failures)

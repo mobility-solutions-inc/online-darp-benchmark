@@ -78,6 +78,74 @@ def test_result_rejects_duplicate_component_ids(tmp_path: Path) -> None:
         validate_manifest(path, "result")
 
 
+def test_private_component_cannot_be_publicly_obtainable() -> None:
+    document = deepcopy(load_document(ROOT / "examples/result.yaml"))
+    component = optimization_component()
+    component["access_class"] = "private"
+    component["exact_environment_publicly_obtainable"] = True
+    document["algorithm"]["optimization_stack"] = {
+        "uses_external_components": True,
+        "components": [component],
+        "notes": None,
+    }
+    assert result_errors(document)
+
+
+def test_result_rejects_solver_calls_without_solver_component(tmp_path: Path) -> None:
+    document = deepcopy(load_document(ROOT / "examples/result.yaml"))
+    component = optimization_component()
+    component["component_type"] = "routing_engine"
+    document["algorithm"]["optimization_stack"] = {
+        "uses_external_components": True,
+        "components": [component],
+        "notes": None,
+    }
+    document["metrics"]["computation"]["external_solver_calls"] = 1
+    path = tmp_path / "result.yaml"
+    path.write_text(yaml_dump(document), encoding="utf-8")
+    with pytest.raises(ValidationFailure, match="must be zero"):
+        validate_manifest(path, "result")
+
+
+@pytest.mark.parametrize(
+    ("solver", "solver_version", "valid"),
+    [
+        ("Example Solver", "1.2.3", True),
+        ("example-solver", "1.2.3", True),
+        ("Example Solver", "9.9.9", False),
+        ("Undisclosed Solver", "1.2.3", False),
+    ],
+)
+def test_offline_certificate_must_match_disclosed_component(
+    tmp_path: Path, solver: str, solver_version: str, valid: bool
+) -> None:
+    document = deepcopy(load_document(ROOT / "examples/result.yaml"))
+    component = optimization_component()
+    component["role"] = "offline_reference"
+    document["algorithm"]["optimization_stack"] = {
+        "uses_external_components": True,
+        "components": [component],
+        "notes": None,
+    }
+    document["evaluation"]["mode"] = "offline_reference"
+    document["evaluation"]["offline_objective"] = "Maximize served requests."
+    document["offline_certificate"] = {
+        "solver": solver,
+        "solver_version": solver_version,
+        "primal_bound": 1,
+        "dual_bound": 1,
+        "relative_gap": 0,
+        "certificate_uri": "https://example.org/certificate",
+    }
+    path = tmp_path / "result.yaml"
+    path.write_text(yaml_dump(document), encoding="utf-8")
+    if valid:
+        validate_manifest(path, "result")
+    else:
+        with pytest.raises(ValidationFailure, match="offline_certificate"):
+            validate_manifest(path, "result")
+
+
 def optimization_component():
     return {
         "component_id": "example-solver",

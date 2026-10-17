@@ -132,7 +132,7 @@ def test_convert_ontra_manhattan_round_trip(tmp_path: Path) -> None:
             "1.0.0",
             graphhopper_url=f"http://127.0.0.1:{server.server_port}",
             osm_pbf_sha256="0" * 64,
-            graphhopper_build="test-build",
+            graphhopper_build="sha256:" + "2" * 64,
             graphhopper_config_sha256="1" * 64,
             enforce_pins=False,
             balanced_fleet_sizes=(4,),
@@ -223,7 +223,7 @@ def test_interrupted_conversion_reuses_only_matching_routing_shards(
             converter_version,
             graphhopper_url=f"http://127.0.0.1:{server.server_port}",
             osm_pbf_sha256="0" * 64,
-            graphhopper_build="test-build",
+            graphhopper_build="sha256:" + "2" * 64,
             graphhopper_config_sha256=graphhopper_config_sha256,
             enforce_pins=False,
             balanced_fleet_sizes=(4,),
@@ -276,9 +276,27 @@ def test_converter_rejects_nonpositive_matrix_shard_size(tmp_path: Path) -> None
             "1.0.0",
             graphhopper_url="http://127.0.0.1:1",
             osm_pbf_sha256="0" * 64,
-            graphhopper_build="test-build",
+            graphhopper_build="sha256:" + "2" * 64,
             graphhopper_config_sha256="1" * 64,
             enforce_pins=False,
             balanced_fleet_sizes=(4,),
             matrix_shard_origins=0,
+        )
+
+
+@pytest.mark.parametrize("build", ["main", "latest", "sha256:abc"])
+def test_converter_requires_immutable_graphhopper_build(tmp_path: Path, build: str) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    _source_fixture(source)
+    with pytest.raises(ValueError, match="immutable sha256"):
+        convert(
+            source,
+            tmp_path / "collection",
+            "1.0.0",
+            graphhopper_url="http://127.0.0.1:1",
+            osm_pbf_sha256="0" * 64,
+            graphhopper_build=build,
+            graphhopper_config_sha256="1" * 64,
+            enforce_pins=False,
         )

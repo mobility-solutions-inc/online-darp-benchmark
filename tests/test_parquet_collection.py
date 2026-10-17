@@ -1198,3 +1198,56 @@ def test_validator_type_checks_file_records(
     dump_yaml(tmp_path / "collection.yaml", collection)
     with pytest.raises(CollectionValidationError, match=expected_error):
         validate_collection(tmp_path)
+
+
+def test_request_serviceability_includes_onboard_dropoffs(tmp_path: Path) -> None:
+    # The request and the onboard drop-off each take 60 s alone; together at least 90 s.
+    _write_collection(
+        tmp_path,
+        node_count=3,
+        vehicle_overrides={"initial_load": 1, "shift_end_time_ms": 80_000},
+        onboard_requests=[_onboard_request(dropoff_node_index=2)],
+    )
+    with pytest.raises(CollectionValidationError, match="within its shift and limits"):
+        validate_collection(tmp_path)
+
+
+def test_onboard_riders_wait_for_the_latest_departure(tmp_path: Path) -> None:
+    # The rider bound for node 1 cannot leave until the other rider departs at 100 s.
+    _write_collection(
+        tmp_path,
+        vehicle_overrides={"initial_load": 2, "shift_end_time_ms": 120_000},
+        onboard_requests=[
+            _onboard_request(onboard_request_index=0, onboard_request_id="onboard-0"),
+            _onboard_request(
+                onboard_request_index=1,
+                onboard_request_id="onboard-1",
+                dropoff_node_index=0,
+                earliest_pickup_time_ms=100_000,
+                pickup_time_ms=100_000,
+                pickup_departure_time_ms=100_000,
+            ),
+        ],
+    )
+    with pytest.raises(CollectionValidationError, match="cannot be dropped off within"):
+        validate_collection(tmp_path)
+
+
+def test_onboard_ride_deadlines_hold_across_the_shared_route(tmp_path: Path) -> None:
+    # Each 50 s ride limit fits a direct 30 s trip, but the second drop-off is 60 s away.
+    _write_collection(
+        tmp_path,
+        node_count=3,
+        vehicle_overrides={"initial_load": 2},
+        onboard_requests=[
+            _onboard_request(
+                onboard_request_index=index,
+                onboard_request_id=f"onboard-{index}",
+                dropoff_node_index=index + 1,
+                max_ride_time_ms=50_000,
+            )
+            for index in range(2)
+        ],
+    )
+    with pytest.raises(CollectionValidationError, match="in any drop-off order"):
+        validate_collection(tmp_path)

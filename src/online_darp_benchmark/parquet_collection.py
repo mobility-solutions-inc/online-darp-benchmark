@@ -904,6 +904,212 @@ def _artifact_local_errors(
     return errors
 
 
+def _onboard_route_errors(
+    onboard: Mapping[str, list[Any]],
+    vehicles: Mapping[str, list[Any]],
+    travel: Mapping[str, list[Any]],
+    node_count: int,
+) -> list[str]:
+    """Check that each vehicle can finish its onboard riders' drop-offs.
+
+    ``dropoff_route_position`` records the source route, not a required order,
+    so every bound holds for any drop-off order. A vehicle leaves its start node
+    no earlier than time zero, its shift start, and its latest onboard
+    departure; riders dropped at the start node need no departure. Each
+    distinct drop-off node is entered once, by at least its cheapest arc from
+    the start or another drop-off, so no triangle inequality is assumed.
+    """
+
+    times = travel["travel_time_ms"]
+    riders_by_vehicle: dict[int, list[int]] = {}
+    for row, vehicle in enumerate(onboard["assigned_vehicle_index"]):
+        riders_by_vehicle.setdefault(vehicle, []).append(row)
+    expired = unreachable = overloaded = late = 0
+    for vehicle, rows in riders_by_vehicle.items():
+        start_node = vehicles["start_node_index"][vehicle]
+        end_node = vehicles["end_node_index"][vehicle]
+        shift_start = max(0, vehicles["shift_start_time_ms"][vehicle])
+        shift_end = vehicles["shift_end_time_ms"][vehicle]
+        max_duration = vehicles["max_route_duration_ms"][vehicle]
+        departures = [onboard["pickup_departure_time_ms"][row] for row in rows]
+        leave = max(shift_start, max(departures))
+        route_start = min(0, min(departures))
+        drop_nodes = {onboard["dropoff_node_index"][row] for row in rows}
+
+        def end_leg(node: int) -> int:
+            return 0 if end_node is None else times[node * node_count + end_node]
+
+        # Each rider alone: drive straight to the drop-off (and home).
+        for row in rows:
+            node = onboard["dropoff_node_index"][row]
+            departure = (
+                max(shift_start, onboard["pickup_departure_time_ms"][row])
+                if node == start_node
+                else leave
+            )
+            arrival = departure + times[start_node * node_count + node]
+            max_ride = onboard["max_ride_time_ms"][row]
+            deadline = onboard["pickup_departure_time_ms"][row] + (max_ride or 0)
+            if max_ride is not None and arrival > deadline:
+                expired += 1
+            finish = arrival + onboard["dropoff_service_time_ms"][row] + end_leg(node)
+            if finish > shift_end or (
+                max_duration is not None and finish - route_start > max_duration
+            ):
+                unreachable += 1
+        if len(rows) < 2:
+            continue
+
+        # All riders together, in any order.
+        entry_costs = {
+            node: 0
+            if node == start_node
+            else min(
+                times[origin * node_count + node]
+                for origin in ({start_node} | drop_nodes) - {node}
+            )
+            for node in drop_nodes
+        }
+        services = sorted(onboard["dropoff_service_time_ms"][row] for row in rows)
+        base = leave if drop_nodes - {start_node} else shift_start
+        finish = (
+            base
+            + sum(entry_costs.values())
+            + sum(services)
+            + (min(end_leg(node) for node in drop_nodes) if end_node is not None else 0)
+        )
+        if finish > shift_end or (
+            max_duration is not None and finish - route_start > max_duration
+        ):
+            overloaded += 1
+
+        # Ride deadlines: the j-th drop-off in any order happens no earlier than
+        # the j smallest entry costs and j - 1 smallest services after leaving,
+        # so the j-th earliest deadline must be at least that late. A node shared
+        # by several riders is entered once; the others add no travel.
+        deadlines = sorted(
+            onboard["pickup_departure_time_ms"][row] + onboard["max_ride_time_ms"][row]
+            for row in rows
+            if onboard["max_ride_time_ms"][row] is not None
+        )
+        if deadlines:
+            costs = sorted(
+                list(entry_costs.values()) + [0] * (len(rows) - len(entry_costs))
+            )
+            for index, deadline in enumerate(deadlines):
+                travel_so_far = sum(costs[: index + 1])
+                earliest = (
+                    (leave if travel_so_far else shift_start)
+                    + travel_so_far
+                    + sum(services[:index])
+                )
+                if deadline < earliest:
+                    late += 1
+                    break
+
+    messages = []
+    if expired:
+        messages.append(
+            f"{expired} onboard rider(s) cannot reach drop-off within max_ride_time_ms"
+        )
+    if unreachable:
+        messages.append(
+            f"{unreachable} onboard rider(s) cannot be dropped off within the assigned "
+            "vehicle's shift and route duration"
+        )
+    if overloaded:
+        messages.append(
+            f"{overloaded} vehicle(s) cannot drop off all onboard riders within the shift "
+            "and route duration"
+        )
+    if late:
+        messages.append(
+            f"{late} vehicle(s) cannot meet every onboard rider's max_ride_time_ms in any "
+            "drop-off order"
+        )
+    return messages
+
+
+def _shared_route_finish(
+    remaining: pa.Table,
+    times: pa.ChunkedArray,
+    node_count: int,
+    start_node: int,
+    end_node: int | None,
+    drops: Sequence[tuple[int, int, int, int]],
+    departure: int,
+) -> pa.ChunkedArray:
+    """Lower-bound when a route serving each request and all onboard drop-offs ends.
+
+    Every node the route visits is entered once, by at least its cheapest arc
+    from a node that may precede it: the start, an onboard drop-off, or (for
+    drop-offs and the request drop-off) the request pickup. Services are
+    added once each, and the route leaves no earlier than its latest onboard
+    departure unless it never leaves the start node.
+    """
+
+    pickup, dropoff = remaining["pickup"], remaining["dropoff"]
+    drop_nodes = {node for node, *_ in drops}
+
+    def arc(origins: Any, destinations: Any) -> Any:
+        return pc.take(times, pc.add(pc.multiply(origins, node_count), destinations))
+
+    def cheapest_from(nodes: set[int], destinations: Any) -> Any:
+        best = None
+        for node in nodes:
+            leg = pc.take(times, pc.add(destinations, node * node_count))
+            best = leg if best is None else pc.min_element_wise(best, leg)
+        return best
+
+    def zero_where(mask: Any, values: Any) -> Any:
+        return pc.if_else(mask, 0, values)
+
+    def at_known_stop(nodes: Any) -> Any:
+        mask = pc.equal(nodes, start_node)
+        for node in drop_nodes:
+            mask = pc.or_(mask, pc.equal(nodes, node))
+        return mask
+
+    entry_pickup = zero_where(
+        at_known_stop(pickup), cheapest_from({start_node} | drop_nodes, pickup)
+    )
+    entry_dropoff = zero_where(
+        pc.or_(at_known_stop(dropoff), pc.equal(dropoff, pickup)),
+        pc.min_element_wise(arc(pickup, dropoff), cheapest_from(drop_nodes, dropoff)),
+    )
+    total = pc.add(
+        pc.add(entry_pickup, entry_dropoff),
+        pc.add(remaining["pickup_and_ride"], remaining["dropoff_service"]),
+    )
+    # pickup_and_ride already counts the direct trip; keep only its service part.
+    total = pc.subtract(total, arc(pickup, dropoff))
+    for node in drop_nodes - {start_node}:
+        static = min(
+            times[origin * node_count + node].as_py()
+            for origin in ({start_node} | drop_nodes) - {node}
+        )
+        entry = pc.min_element_wise(
+            pc.min_element_wise(
+                pc.take(times, pc.add(pc.multiply(pickup, node_count), node)),
+                pc.take(times, pc.add(pc.multiply(dropoff, node_count), node)),
+            ),
+            static,
+        )
+        total = pc.add(total, entry)
+    total = pc.add(total, sum(service for _, service, _, _ in drops))
+    if end_node is not None:
+        home = pc.take(times, pc.add(pc.multiply(dropoff, node_count), end_node))
+        for node in drop_nodes:
+            home = pc.min_element_wise(home, times[node * node_count + end_node].as_py())
+        total = pc.add(total, home)
+    leave = max(departure, max(drop[3] for drop in drops))
+    leaves = pc.or_(
+        pc.or_(pc.not_equal(pickup, start_node), pc.not_equal(dropoff, start_node)),
+        pa.scalar(bool(drop_nodes - {start_node})),
+    )
+    return pc.add(pc.if_else(leaves, leave, departure), total)
+
+
 def _seat_release_lower_bound(
     remaining: pa.Table,
     to_pickup: pa.ChunkedArray,
@@ -1103,12 +1309,26 @@ def _requests_outside_fleet_shifts(
                 pc.less_equal(finish, shift_end),
             ),
         )
+        # A warm-start route has already run since its earliest onboard departure.
+        elapsed_before_start = max(0, -min((drop[3] for drop in drops), default=0))
         if max_duration is not None:
-            # A warm-start route has already run since its earliest onboard departure.
-            elapsed_before_start = max(0, -min((drop[3] for drop in drops), default=0))
             served = pc.and_(
                 served, pc.less_equal(pc.add(driving, elapsed_before_start), max_duration)
             )
+        if drops:
+            # The same route must also finish every onboard drop-off.
+            shared_finish = _shared_route_finish(
+                remaining, times, node_count, start_node, end_node, drops, departure
+            )
+            served = pc.and_(served, pc.less_equal(shared_finish, shift_end))
+            if max_duration is not None:
+                served = pc.and_(
+                    served,
+                    pc.less_equal(
+                        pc.add(pc.subtract(shared_finish, departure), elapsed_before_start),
+                        max_duration,
+                    ),
+                )
         remaining = remaining.filter(pc.invert(served))
     return remaining.num_rows
 
@@ -1433,99 +1653,10 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
                 )
             ):
                 checked_relationships.add(onboard_deadline_key)
-                expired = unreachable = 0
-                for row in onboard_rows:
-                    vehicle = onboard["assigned_vehicle_index"][row]
-                    dropoff = onboard["dropoff_node_index"][row]
-                    # Earliest drop-off: drive straight there from the start node,
-                    # leaving no earlier than the simulation start, the vehicle's
-                    # shift start, or the rider's own pickup departure.
-                    departure = max(
-                        0,
-                        vehicles["shift_start_time_ms"][vehicle],
-                        onboard["pickup_departure_time_ms"][row],
-                    )
-                    to_dropoff = travel["travel_time_ms"][
-                        vehicles["start_node_index"][vehicle] * node_count + dropoff
-                    ]
-                    max_ride = onboard["max_ride_time_ms"][row]
-                    if (
-                        max_ride is not None
-                        and departure + to_dropoff
-                        > onboard["pickup_departure_time_ms"][row] + max_ride
-                    ):
-                        expired += 1
-                    remaining_work = to_dropoff + onboard["dropoff_service_time_ms"][row]
-                    end_node = vehicles["end_node_index"][vehicle]
-                    if end_node is not None:
-                        remaining_work += travel["travel_time_ms"][
-                            dropoff * node_count + end_node
-                        ]
-                    # A vehicle carrying this rider has been on its route since the
-                    # earlier of time zero and the rider's pickup departure.
-                    elapsed = (
-                        departure
-                        + remaining_work
-                        - min(0, onboard["pickup_departure_time_ms"][row])
-                    )
-                    max_duration = vehicles["max_route_duration_ms"][vehicle]
-                    if departure + remaining_work > vehicles["shift_end_time_ms"][vehicle] or (
-                        max_duration is not None and elapsed > max_duration
-                    ):
-                        unreachable += 1
-                if expired:
-                    errors.append(
-                        f"{onboard_id}: {expired} onboard rider(s) cannot reach drop-off "
-                        "within max_ride_time_ms"
-                    )
-                if unreachable:
-                    errors.append(
-                        f"{onboard_id}: {unreachable} onboard rider(s) cannot be dropped "
-                        "off within the assigned vehicle's shift and route duration"
-                    )
-                # dropoff_route_position records the source route, not a required
-                # order, so bound visiting all of a vehicle's drop-offs in any order:
-                # each distinct drop-off node is entered by its cheapest arc from the
-                # start or another drop-off, plus every service and the cheapest leg
-                # home. This needs no triangle inequality.
-                riders_by_vehicle: dict[int, list[int]] = {}
-                for row in onboard_rows:
-                    riders_by_vehicle.setdefault(
-                        onboard["assigned_vehicle_index"][row], []
-                    ).append(row)
-                overloaded = 0
-                for vehicle, rows in riders_by_vehicle.items():
-                    if len(rows) < 2:
-                        continue
-                    start_node = vehicles["start_node_index"][vehicle]
-                    drop_nodes = {onboard["dropoff_node_index"][row] for row in rows}
-                    work = sum(onboard["dropoff_service_time_ms"][row] for row in rows)
-                    for node in drop_nodes - {start_node}:
-                        work += min(
-                            travel["travel_time_ms"][origin * node_count + node]
-                            for origin in ({start_node} | drop_nodes) - {node}
-                        )
-                    end_node = vehicles["end_node_index"][vehicle]
-                    if end_node is not None:
-                        work += min(
-                            travel["travel_time_ms"][
-                                onboard["dropoff_node_index"][row] * node_count + end_node
-                            ]
-                            for row in rows
-                        )
-                    departures = [onboard["pickup_departure_time_ms"][row] for row in rows]
-                    departure = max(0, vehicles["shift_start_time_ms"][vehicle], min(departures))
-                    max_duration = vehicles["max_route_duration_ms"][vehicle]
-                    if departure + work > vehicles["shift_end_time_ms"][vehicle] or (
-                        max_duration is not None
-                        and departure + work - min(0, min(departures)) > max_duration
-                    ):
-                        overloaded += 1
-                if overloaded:
-                    errors.append(
-                        f"{onboard_id}: {overloaded} vehicle(s) cannot drop off all onboard "
-                        "riders within the shift and route duration"
-                    )
+                errors.extend(
+                    f"{onboard_id}: {message}"
+                    for message in _onboard_route_errors(onboard, vehicles, travel, node_count)
+                )
         elif any(vehicles["initial_load"]):
             errors.append(f"{relative_manifest}: fleet has load but no onboard_requests component")
 

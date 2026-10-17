@@ -7,6 +7,7 @@ import concurrent.futures
 import hashlib
 import http.client
 import json
+import re
 import shutil
 import struct
 import threading
@@ -716,8 +717,8 @@ def convert(
             character not in "0123456789abcdef" for character in digest
         ):
             raise ValueError(f"{label} must be 64 lowercase hexadecimal characters")
-    if not graphhopper_build.strip():
-        raise ValueError("graphhopper_build must not be empty")
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", graphhopper_build):
+        raise ValueError("graphhopper_build must be an immutable sha256:<digest> image ID")
     source_requests, source_vehicles, pool = _load_source(source, enforce_pins)
     nodes, point_to_index, pickup_nodes_by_zone = _used_nodes(
         source_requests, source_vehicles, pool
@@ -1042,7 +1043,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--graphhopper-build",
         required=True,
-        help="immutable GraphHopper image ID or equivalent build identifier",
+        help="immutable GraphHopper image ID, sha256:<digest>",
     )
     parser.add_argument(
         "--graphhopper-config-sha256",

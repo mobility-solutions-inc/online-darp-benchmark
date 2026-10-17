@@ -405,11 +405,24 @@ def _routing_fingerprint(
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _resumable_routing_fingerprint(path: Path) -> str | None:
+def _read_resume_state(path: Path, routing_fingerprint: str) -> dict[str, str] | None:
+    """Return recorded shard digests if *path* belongs to the same routing run."""
+
     try:
-        return json.loads(path.read_text(encoding="utf-8"))["routing_fingerprint"]
-    except (FileNotFoundError, json.JSONDecodeError, KeyError, TypeError):
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
         return None
+    if not isinstance(state, dict) or state.get("routing_fingerprint") != routing_fingerprint:
+        return None
+    shards = state.get("shards")
+    return shards if isinstance(shards, dict) else {}
+
+
+def _write_resume_state(path: Path, routing_fingerprint: str, shards: dict[str, str]) -> None:
+    partial = path.with_name(path.name + ".partial")
+    state = {"routing_fingerprint": routing_fingerprint, "shards": shards}
+    partial.write_text(json.dumps(state, sort_keys=True) + "\n", encoding="utf-8")
+    partial.replace(path)
 
 
 def _write_travel_matrix(
@@ -451,13 +464,12 @@ def _write_travel_matrix(
         graphhopper_info,
     )
     resume_path = output / ROUTING_RESUME_FILENAME
-    if _resumable_routing_fingerprint(resume_path) != routing_fingerprint:
+    shard_digests = _read_resume_state(resume_path, routing_fingerprint)
+    if shard_digests is None:
         shutil.rmtree(output / TRAVEL_TIMES_DIRECTORY, ignore_errors=True)
         resume_path.parent.mkdir(parents=True, exist_ok=True)
-        resume_path.write_text(
-            json.dumps({"routing_fingerprint": routing_fingerprint}) + "\n",
-            encoding="utf-8",
-        )
+        shard_digests = {}
+        _write_resume_state(resume_path, routing_fingerprint, shard_digests)
     with concurrent.futures.ThreadPoolExecutor(
         max_workers=graphhopper_concurrency
     ) as executor:
@@ -473,6 +485,9 @@ def _write_travel_matrix(
                 expected_rows=expected_rows,
                 artifact_id=artifact_id,
             )
+            # Reuse only bytes this routing run recorded after writing them.
+            if record is not None and record["sha256"] != shard_digests.get(relative_path):
+                record = None
             if record is None:
                 columns: dict[str, list[Any]] = {
                     "from_node_index": [],
@@ -513,6 +528,8 @@ def _write_travel_matrix(
                     collection_id=COLLECTION_ID,
                     artifact_id=artifact_id,
                 )
+                shard_digests[relative_path] = record["sha256"]
+                _write_resume_state(resume_path, routing_fingerprint, shard_digests)
             record["path"] = relative_path
             file_records.append(record)
     artifacts[artifact_id] = {

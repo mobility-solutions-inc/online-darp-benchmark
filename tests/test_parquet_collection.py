@@ -153,7 +153,7 @@ def _write_collection(
         "components": components,
         "time": {"service_horizon_ms": 300_000},
         "spatial": {"profile": spatial_profile or node_profile},
-        "relocation": {"allowed": True},
+        "relocation": {"allowed": True, "destinations": "nodes.relocation_allowed"},
     }
     dump_yaml(tmp_path / manifest_path, instance)
     dump_yaml(
@@ -831,3 +831,60 @@ def test_serviceability_allows_free_seats_with_onboard_riders(tmp_path: Path) ->
         onboard_requests=[_onboard_request(party_size=3)],
     )
     assert validate_collection(tmp_path)["valid"] is True
+
+
+def test_validator_requires_registered_relocation_policy(tmp_path: Path) -> None:
+    _write_collection(tmp_path)
+    instance = yaml.safe_load((tmp_path / "instances/test.yaml").read_text())
+    instance["relocation"]["destinations"] = "anywhere"
+    dump_yaml(tmp_path / "instances/test.yaml", instance)
+    with pytest.raises(CollectionValidationError, match="relocation.destinations must be"):
+        validate_collection(tmp_path)
+
+
+@pytest.mark.parametrize(("onboard_parties", "valid"), [((4,), True), ((2, 2), False)])
+def test_serviceability_releases_enough_onboard_seats(
+    tmp_path: Path, onboard_parties: tuple[int, ...], valid: bool
+) -> None:
+    onboard = [
+        _onboard_request(
+            onboard_request_index=index,
+            onboard_request_id=f"onboard-{index}",
+            party_size=party,
+            dropoff_service_time_ms=10_000,
+        )
+        for index, party in enumerate(onboard_parties)
+    ]
+    # One stop frees the seats in 70 s; two stops need at least 80 s.
+    _write_collection(
+        tmp_path,
+        vehicle_overrides={"initial_load": 4},
+        request_overrides={"party_size": 4, "latest_pickup_time_ms": 75_000},
+        onboard_requests=onboard,
+    )
+    if valid:
+        assert validate_collection(tmp_path)["valid"] is True
+    else:
+        with pytest.raises(CollectionValidationError, match="within its shift and limits"):
+            validate_collection(tmp_path)
+
+
+@pytest.mark.parametrize(("max_route_duration_ms", "valid"), [(180_000, True), (150_000, False)])
+def test_serviceability_counts_unavoidable_dropoff_wait(
+    tmp_path: Path, max_route_duration_ms: int, valid: bool
+) -> None:
+    # Latest pickup 60 s plus 30 s travel still waits 110 s for the 200 s drop-off.
+    _write_collection(
+        tmp_path,
+        vehicle_overrides={"max_route_duration_ms": max_route_duration_ms},
+        request_overrides={
+            "earliest_dropoff_time_ms": 200_000,
+            "latest_dropoff_time_ms": 250_000,
+            "max_ride_time_ms": None,
+        },
+    )
+    if valid:
+        assert validate_collection(tmp_path)["valid"] is True
+    else:
+        with pytest.raises(CollectionValidationError, match="within its shift and limits"):
+            validate_collection(tmp_path)

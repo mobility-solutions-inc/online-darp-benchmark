@@ -233,6 +233,9 @@ SCHEMAS = {
     "travel_times": TRAVEL_TIMES_SCHEMA,
 }
 
+# The only registered relocation-destination policy; it is part of the fingerprint.
+RELOCATION_DESTINATIONS = "nodes.relocation_allowed"
+
 REQUIRED_INSTANCE_ROLES = frozenset(
     {"requests", "reveal_times", "vehicles", "nodes", "travel_times"}
 )
@@ -421,7 +424,7 @@ def physical_problem_sha256(
         "service_horizon_ms": service_horizon_ms,
         "relocation": {
             "allowed": relocation_allowed,
-            "destinations": "nodes.relocation_allowed",
+            "destinations": RELOCATION_DESTINATIONS,
         },
     }
     return canonical_sha256(value)
@@ -599,6 +602,8 @@ def _instance_errors(instance: Any, collection_id: Any) -> list[str]:
         errors.append("spatial.profile must be declared")
     if not isinstance(sections["relocation"].get("allowed"), bool):
         errors.append("relocation.allowed must be a boolean")
+    if sections["relocation"].get("destinations") != RELOCATION_DESTINATIONS:
+        errors.append(f"relocation.destinations must be {RELOCATION_DESTINATIONS!r}")
     return errors
 
 
@@ -775,6 +780,43 @@ def _artifact_table(
     return pa.concat_tables(tables)
 
 
+def _seat_release_lower_bound(
+    remaining: pa.Table,
+    to_pickup: pa.ChunkedArray,
+    times: pa.ChunkedArray,
+    node_count: int,
+    start_node: int,
+    free_seats: int,
+    drops: Sequence[tuple[int, int, int]],
+) -> pa.ChunkedArray:
+    """Lower-bound the time to reach each pickup after freeing enough seats."""
+
+    first_leg = min(times[start_node * node_count + node].as_py() for node, _, _ in drops)
+    last_leg = None
+    single_detour = None
+    for node, service, _ in drops:
+        from_drop = pc.take(times, pc.add(remaining["pickup"], node * node_count))
+        last_leg = from_drop if last_leg is None else pc.min_element_wise(last_leg, from_drop)
+        via = pc.add(from_drop, times[start_node * node_count + node].as_py() + service)
+        single_detour = via if single_detour is None else pc.min_element_wise(single_detour, via)
+    largest_parties = sorted((party for _, _, party in drops), reverse=True)
+    smallest_services = sorted(service for _, service, _ in drops)
+    released = [sum(largest_parties[:count]) for count in range(1, len(drops) + 1)]
+    shortage = pc.subtract(remaining["party_size"], free_seats)
+    # Requests needing more seats than all onboard parties hold fail on capacity
+    # elsewhere; give them the all-parties bound. Walking from the most parties
+    # down to one leaves the bound for the fewest parties that free enough seats.
+    bound = pc.add(pc.add(last_leg, first_leg), sum(smallest_services))
+    for count in range(len(drops), 0, -1):
+        stops = (
+            single_detour
+            if count == 1
+            else pc.add(pc.add(last_leg, first_leg), sum(smallest_services[:count]))
+        )
+        bound = pc.if_else(pc.less_equal(shortage, released[count - 1]), stops, bound)
+    return pc.if_else(pc.greater(shortage, 0), bound, to_pickup)
+
+
 def _requests_outside_fleet_shifts(
     requests: pa.Table,
     vehicles: pa.Table,
@@ -787,11 +829,15 @@ def _requests_outside_fleet_shifts(
     A vehicle qualifies if it can reach the pickup by the latest pickup time,
     then complete pickup service and direct travel by the latest drop-off time,
     and finish drop-off service (after any earliest drop-off wait) and travel to
-    its terminal within its shift and maximum route duration. If its onboard
-    riders leave too few free seats, it must first drop at least one of them,
-    which delays the pickup by at least the shortest detour through an onboard
-    drop-off. Other constraints are relaxed, so this never rejects a request
-    that the vehicle could serve on its own.
+    its terminal within its shift and maximum route duration. Route duration
+    counts the drop-off wait that remains even when departure is delayed as
+    late as the pickup window allows. If onboard riders leave too few free
+    seats, the vehicle must first drop the fewest parties that free enough
+    seats; the pickup is delayed by at least the cheapest first leg to, and
+    last leg from, an onboard drop-off plus those parties' smallest service
+    times (or the exact shortest detour when one party suffices). Other
+    constraints are relaxed, so this never rejects a request that the vehicle
+    could serve on its own.
     """
 
     times = travel["travel_time_ms"]
@@ -813,15 +859,16 @@ def _requests_outside_fleet_shifts(
             "dropoff_service": requests["dropoff_service_time_ms"],
         }
     )
-    onboard_dropoffs: dict[int, list[tuple[int, int]]] = {}
+    onboard_dropoffs: dict[int, list[tuple[int, int, int]]] = {}
     if onboard is not None:
-        for vehicle, node, service in zip(
+        for vehicle, node, service, party in zip(
             onboard["assigned_vehicle_index"].to_pylist(),
             onboard["dropoff_node_index"].to_pylist(),
             onboard["dropoff_service_time_ms"].to_pylist(),
+            onboard["party_size"].to_pylist(),
             strict=True,
         ):
-            onboard_dropoffs.setdefault(vehicle, []).append((node, service))
+            onboard_dropoffs.setdefault(vehicle, []).append((node, service, party))
     vehicle_groups = set()
     for vehicle, row in enumerate(
         zip(
@@ -853,16 +900,9 @@ def _requests_outside_fleet_shifts(
         capacity, load, start_node, end_node, shift_start, shift_end, max_duration, drops = group
         to_pickup = pc.take(times, pc.add(remaining["pickup"], start_node * node_count))
         if load and drops:
-            # Lower bound on reaching the pickup after dropping one onboard rider.
-            detour = None
-            for node, service in drops:
-                via = pc.add(
-                    pc.take(times, pc.add(remaining["pickup"], node * node_count)),
-                    times[start_node * node_count + node].as_py() + service,
-                )
-                detour = via if detour is None else pc.min_element_wise(detour, via)
-            needs_seat = pc.greater(remaining["party_size"], capacity - load)
-            to_pickup = pc.if_else(needs_seat, detour, to_pickup)
+            to_pickup = _seat_release_lower_bound(
+                remaining, to_pickup, times, node_count, start_node, capacity - load, drops
+            )
         arrival = pc.max_element_wise(pc.add(to_pickup, shift_start), remaining["earliest"])
         dropoff_arrival = pc.add(arrival, remaining["pickup_and_ride"])
         finish = pc.add(
@@ -871,8 +911,21 @@ def _requests_outside_fleet_shifts(
             ),
             remaining["dropoff_service"],
         )
+        # Delaying departure until the latest pickup removes waiting before the
+        # pickup, but any earliest drop-off wait beyond that is unavoidable.
+        unavoidable_wait = pc.fill_null(
+            pc.max_element_wise(
+                pc.subtract(
+                    remaining["earliest_dropoff"],
+                    pc.add(remaining["latest"], remaining["pickup_and_ride"]),
+                ),
+                0,
+            ),
+            0,
+        )
         driving = pc.add(
-            pc.add(to_pickup, remaining["pickup_and_ride"]), remaining["dropoff_service"]
+            pc.add(pc.add(to_pickup, remaining["pickup_and_ride"]), unavoidable_wait),
+            remaining["dropoff_service"],
         )
         if end_node is not None:
             to_end = pc.take(

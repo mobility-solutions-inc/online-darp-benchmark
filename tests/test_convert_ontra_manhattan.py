@@ -4,6 +4,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
+import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 import yaml
@@ -187,14 +188,15 @@ def test_convert_ontra_manhattan_round_trip(tmp_path: Path) -> None:
     (
         "resumed_config_sha256",
         "resumed_converter_version",
-        "truncate_first_shard",
+        "tamper_first_shard",
         "expected_resumed_routes",
     ),
     [
-        ("1" * 64, "test-version", False, 0),
-        ("2" * 64, "test-version", False, 20),
-        ("1" * 64, "test-version-2", False, 20),
-        ("1" * 64, "test-version", True, 8),
+        ("1" * 64, "test-version", None, 0),
+        ("2" * 64, "test-version", None, 20),
+        ("1" * 64, "test-version-2", None, 20),
+        ("1" * 64, "test-version", "truncate", 8),
+        ("1" * 64, "test-version", "replace", 8),
     ],
 )
 def test_interrupted_conversion_reuses_only_matching_routing_shards(
@@ -202,7 +204,7 @@ def test_interrupted_conversion_reuses_only_matching_routing_shards(
     monkeypatch: pytest.MonkeyPatch,
     resumed_config_sha256: str,
     resumed_converter_version: str,
-    truncate_first_shard: bool,
+    tamper_first_shard: str | None,
     expected_resumed_routes: int,
 ) -> None:
     source = tmp_path / "source"
@@ -238,9 +240,17 @@ def test_interrupted_conversion_reuses_only_matching_routing_shards(
             with pytest.raises(RuntimeError, match="interrupted"):
                 run("1" * 64)
         assert (output / ROUTING_RESUME_FILENAME).exists()
-        if truncate_first_shard:
-            shard = output / TRAVEL_TIMES_DIRECTORY / "part-00000-00001.parquet"
+        shard = output / TRAVEL_TIMES_DIRECTORY / "part-00000-00001.parquet"
+        if tamper_first_shard == "truncate":
             shard.write_bytes(shard.read_bytes()[: shard.stat().st_size // 2])
+        elif tamper_first_shard == "replace":
+            table = pq.read_table(shard)
+            replaced = table.set_column(
+                table.schema.get_field_index("travel_time_ms"),
+                "travel_time_ms",
+                pa.array([1] * table.num_rows, pa.int64()),
+            )
+            pq.write_table(replaced, shard)
 
         _GraphHopperHandler.route_count = 0
         run(resumed_config_sha256, resumed_converter_version)

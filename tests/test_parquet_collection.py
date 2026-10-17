@@ -1,9 +1,11 @@
 from pathlib import Path
 
 import pyarrow.parquet as pq
+import pytest
 
 from online_darp_benchmark.parquet_collection import (
     FORMAT_VERSION,
+    CollectionValidationError,
     artifact_record,
     dump_yaml,
     physical_problem_sha256,
@@ -12,7 +14,7 @@ from online_darp_benchmark.parquet_collection import (
 )
 
 
-def test_reference_writer_and_validator_round_trip(tmp_path: Path) -> None:
+def _write_collection(tmp_path: Path, **vehicle_overrides: object) -> None:
     collection_id = "test-collection"
     artifacts = {}
     components = {}
@@ -74,6 +76,7 @@ def test_reference_writer_and_validator_round_trip(tmp_path: Path) -> None:
             for destination in range(2)
         ],
     }
+    tables["vehicles"][0].update(vehicle_overrides)
     for role, rows in tables.items():
         artifact_id = f"test.{role}"
         path = tmp_path / "tables" / f"{role}.parquet"
@@ -122,7 +125,30 @@ def test_reference_writer_and_validator_round_trip(tmp_path: Path) -> None:
         },
     )
 
+
+
+def test_reference_writer_and_validator_round_trip(tmp_path: Path) -> None:
+    _write_collection(tmp_path)
     report = validate_collection(tmp_path)
     assert report["valid"] is True
     schema_metadata = pq.read_schema(tmp_path / "tables" / "requests.parquet").metadata
     assert schema_metadata[b"online_darp.schema_name"] == b"requests"
+
+
+@pytest.mark.parametrize(
+    ("vehicle_overrides", "expected_error"),
+    [
+        (
+            {"shift_start_time_ms": 300_000, "shift_end_time_ms": 0},
+            "reversed vehicle shift",
+        ),
+        ({"max_route_duration_ms": 0}, "nonpositive maximum route duration"),
+        ({"max_route_duration_ms": -1}, "nonpositive maximum route duration"),
+    ],
+)
+def test_validator_rejects_invalid_vehicle_availability(
+    tmp_path: Path, vehicle_overrides: dict[str, int], expected_error: str
+) -> None:
+    _write_collection(tmp_path, **vehicle_overrides)
+    with pytest.raises(CollectionValidationError, match=expected_error):
+        validate_collection(tmp_path)

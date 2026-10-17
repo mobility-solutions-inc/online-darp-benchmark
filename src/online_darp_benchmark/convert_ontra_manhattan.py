@@ -7,6 +7,7 @@ import concurrent.futures
 import hashlib
 import http.client
 import json
+import shutil
 import struct
 import threading
 from pathlib import Path
@@ -57,6 +58,8 @@ BALANCED_SHIFT_END_MS = 14_400_000
 REQUESTS_FILENAME = "requests_manhattan_tlc_8am_pool25.json"
 HISTORICAL_FLEET_FILENAME = "vehicles_manhattan_tlc_8am_2000_pool25.json"
 POINT_POOL_FILENAME = "manhattan_tlc_graphhopper_point_pool_25.json"
+TRAVEL_TIMES_DIRECTORY = "tables/networks/pool25-graphhopper-car-x1p4/travel-times"
+ROUTING_RESUME_FILENAME = ".routing-resume.json"
 
 PINNED_SOURCE_SHA256 = {
     REQUESTS_FILENAME: "e68e20594faaa9b863f905dcefa9d7fa5f5c747d1df8b3abdef705cd255bff98",
@@ -361,6 +364,45 @@ def _existing_parquet_record(
     }
 
 
+def _routing_fingerprint(
+    coordinates: list[tuple[float, float]],
+    pool_sha256: str,
+    shard_origins: int,
+    osm_pbf_sha256: str,
+    graphhopper_build: str,
+    graphhopper_config_sha256: str,
+    graphhopper_info: dict[str, Any],
+) -> str:
+    """Digest every input that determines the routed shard contents."""
+
+    inputs = {
+        "coordinates": coordinates,
+        "pool_sha256": pool_sha256,
+        "shard_origins": shard_origins,
+        "osm_pbf_sha256": osm_pbf_sha256,
+        "graphhopper_build": graphhopper_build,
+        "graphhopper_config_sha256": graphhopper_config_sha256,
+        "graphhopper_source_commit": GRAPHHOPPER_COMMIT,
+        "graphhopper_profile": GRAPHHOPPER_PROFILE,
+        "graphhopper_index_high_resolution_m": GRAPHHOPPER_INDEX_HIGH_RESOLUTION_METERS,
+        "graphhopper_index_max_region_search": GRAPHHOPPER_MAX_REGION_SEARCH,
+        "graphhopper_server_info": graphhopper_info,
+        "time_multiplier": [
+            TRAVEL_TIME_MULTIPLIER_NUMERATOR,
+            TRAVEL_TIME_MULTIPLIER_DENOMINATOR,
+        ],
+    }
+    encoded = json.dumps(inputs, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _resumable_routing_fingerprint(path: Path) -> str | None:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))["routing_fingerprint"]
+    except (FileNotFoundError, json.JSONDecodeError, KeyError, TypeError):
+        return None
+
+
 def _write_travel_matrix(
     output: Path,
     artifacts: dict[str, Any],
@@ -385,14 +427,33 @@ def _write_travel_matrix(
         profile.get("name") for profile in graphhopper_info.get("profiles", [])
     }:
         raise ValueError(f"GraphHopper server does not expose {GRAPHHOPPER_PROFILE!r}")
+    # Existing shards are reused only when an interrupted run recorded the same
+    # routing inputs. The marker stays outside the published collection: convert()
+    # removes it on success, so shard bytes and checksums are unchanged.
+    routing_fingerprint = _routing_fingerprint(
+        coordinates,
+        pool_sha256,
+        shard_origins,
+        osm_pbf_sha256,
+        graphhopper_build,
+        graphhopper_config_sha256,
+        graphhopper_info,
+    )
+    resume_path = output / ROUTING_RESUME_FILENAME
+    if _resumable_routing_fingerprint(resume_path) != routing_fingerprint:
+        shutil.rmtree(output / TRAVEL_TIMES_DIRECTORY, ignore_errors=True)
+        resume_path.parent.mkdir(parents=True, exist_ok=True)
+        resume_path.write_text(
+            json.dumps({"routing_fingerprint": routing_fingerprint}) + "\n",
+            encoding="utf-8",
+        )
     with concurrent.futures.ThreadPoolExecutor(
         max_workers=graphhopper_concurrency
     ) as executor:
         for start in range(0, node_count, shard_origins):
             end = min(start + shard_origins, node_count)
             relative_path = (
-                "tables/networks/pool25-graphhopper-car-x1p4/travel-times/"
-                f"part-{start:05d}-{end - 1:05d}.parquet"
+                f"{TRAVEL_TIMES_DIRECTORY}/part-{start:05d}-{end - 1:05d}.parquet"
             )
             absolute_path = output / relative_path
             expected_rows = (end - start) * node_count
@@ -904,6 +965,7 @@ def convert(
         "instances": instance_paths,
     }
     dump_yaml(output / "collection.yaml", collection)
+    (output / ROUTING_RESUME_FILENAME).unlink(missing_ok=True)
     return {
         "collection_id": COLLECTION_ID,
         "requests": len(source_requests),

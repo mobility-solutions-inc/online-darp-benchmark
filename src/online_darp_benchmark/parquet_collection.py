@@ -444,6 +444,20 @@ def validate_collection(root: Path) -> dict[str, Any]:
                 )
             ):
                 errors.append(f"{fleet_id}: initial load exceeds vehicle capacity")
+            if any(
+                end < start
+                for start, end in zip(
+                    vehicles["shift_start_time_ms"],
+                    vehicles["shift_end_time_ms"],
+                    strict=True,
+                )
+            ):
+                errors.append(f"{fleet_id}: reversed vehicle shift")
+            if any(
+                duration is not None and duration < 1
+                for duration in vehicles["max_route_duration_ms"]
+            ):
+                errors.append(f"{fleet_id}: nonpositive maximum route duration")
 
         matrix_key = ("matrix", components["nodes"], components["travel_times"])
         if matrix_key not in checked_relationships:

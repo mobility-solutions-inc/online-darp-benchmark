@@ -8,10 +8,12 @@ import pyarrow.parquet as pq
 import pytest
 import yaml
 
+from online_darp_benchmark import convert_ontra_manhattan
 from online_darp_benchmark.convert_ontra_manhattan import (
     HISTORICAL_FLEET_FILENAME,
     POINT_POOL_FILENAME,
     REQUESTS_FILENAME,
+    ROUTING_RESUME_FILENAME,
     convert,
 )
 from online_darp_benchmark.parquet_collection import validate_collection
@@ -168,6 +170,63 @@ def test_convert_ontra_manhattan_round_trip(tmp_path: Path) -> None:
     matrix = pq.read_table(output / matrix_files[0]["path"]).to_pydict()
     assert matrix["travel_time_ms"][:5] == [0, 3000, 3000, 3000, 3000]
     assert matrix["distance_mm"][:5] == [0, 12345, 12345, 12345, 12345]
+    assert not (output / ROUTING_RESUME_FILENAME).exists()
+
+
+@pytest.mark.parametrize(
+    ("resumed_config_sha256", "expected_resumed_routes"),
+    [("1" * 64, 0), ("2" * 64, 20)],
+)
+def test_interrupted_conversion_reuses_only_matching_routing_shards(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    resumed_config_sha256: str,
+    expected_resumed_routes: int,
+) -> None:
+    source = tmp_path / "source"
+    output = tmp_path / "collection"
+    source.mkdir()
+    _source_fixture(source)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _GraphHopperHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    def run(graphhopper_config_sha256: str) -> None:
+        convert(
+            source,
+            output,
+            "test-version",
+            graphhopper_url=f"http://127.0.0.1:{server.server_port}",
+            osm_pbf_sha256="0" * 64,
+            graphhopper_build="test-build",
+            graphhopper_config_sha256=graphhopper_config_sha256,
+            enforce_pins=False,
+            balanced_fleet_sizes=(4,),
+            matrix_shard_origins=2,
+            graphhopper_concurrency=4,
+        )
+
+    def interrupt(*args: object) -> None:
+        raise RuntimeError("interrupted after routing")
+
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(convert_ontra_manhattan, "_requests", interrupt)
+            with pytest.raises(RuntimeError, match="interrupted"):
+                run("1" * 64)
+        assert (output / ROUTING_RESUME_FILENAME).exists()
+
+        _GraphHopperHandler.route_count = 0
+        run(resumed_config_sha256)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+    assert _GraphHopperHandler.route_count == expected_resumed_routes
+    assert not (output / ROUTING_RESUME_FILENAME).exists()
+    assert validate_collection(output)["valid"] is True
 
 
 def test_converter_rejects_nonpositive_matrix_shard_size(tmp_path: Path) -> None:

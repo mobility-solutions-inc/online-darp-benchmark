@@ -30,6 +30,25 @@ FAMILIES = {
     "ropke_etal_2007": "ropke-et-al-2007",
 }
 
+ROPKE_SIZES = (
+    (2, 16), (2, 20), (2, 24),
+    (3, 18), (3, 24), (3, 30), (3, 36),
+    (4, 16), (4, 24), (4, 32), (4, 40), (4, 48),
+    (5, 40), (5, 50), (5, 60),
+    (6, 48), (6, 60), (6, 72),
+    (7, 56), (7, 70), (7, 84),
+    (8, 64), (8, 80), (8, 96),
+)
+EXPECTED_INSTANCE_STEMS = {
+    "cordeau_laporte_2003": frozenset(f"pr{number:02d}" for number in range(1, 21)),
+    "ropke_etal_2007": frozenset(
+        f"{series}{vehicles}-{requests}"
+        for series in "ab"
+        for vehicles, requests in ROPKE_SIZES
+    ),
+}
+EXPECTED_INSTANCE_COUNT = 68
+
 CITATIONS_BIB = """@dataset{eccel2020instances,
   author = {Eccel, Renan Artur Lopes},
   title = {instances-DDARP-DPDPTW},
@@ -227,6 +246,29 @@ def _write_component(
     )
 
 
+def _static_paths(source: Path) -> dict[str, list[Path]]:
+    """Return each family's static files, requiring exactly the pinned source set."""
+
+    paths_by_family: dict[str, list[Path]] = {}
+    failures: list[str] = []
+    for source_family in FAMILIES:
+        static_root = _source_pair_root(source, source_family) / "json_static_instances"
+        paths = sorted(static_root.glob("*.json"))
+        stems = {path.stem for path in paths}
+        expected = EXPECTED_INSTANCE_STEMS[source_family]
+        if missing := sorted(expected - stems):
+            failures.append(f"{static_root}: missing {', '.join(missing)}")
+        if unexpected := sorted(stems - expected):
+            failures.append(f"{static_root}: unexpected {', '.join(unexpected)}")
+        paths_by_family[source_family] = paths
+    if failures:
+        raise ValueError(
+            f"Eccel {SOURCE_RELEASE} source must contain exactly "
+            f"{EXPECTED_INSTANCE_COUNT} DDARP instances:\n" + "\n".join(failures)
+        )
+    return paths_by_family
+
+
 def convert(source: Path, output: Path, converter_version: str) -> dict[str, Any]:
     """Convert all 68 DDARP physical instances and paired reveal schedules."""
 
@@ -235,15 +277,11 @@ def convert(source: Path, output: Path, converter_version: str) -> dict[str, Any
     artifacts: dict[str, Any] = {}
     instance_paths: list[str] = []
     source_checksums: list[tuple[str, str]] = []
+    static_paths_by_family = _static_paths(source)
 
     for source_family, normalized_family in FAMILIES.items():
-        family_root = _source_pair_root(source, source_family)
-        static_root = family_root / "json_static_instances"
-        dynamic_root = family_root / "json_dynamic_instances"
-        static_paths = sorted(static_root.glob("*.json"))
-        if not static_paths:
-            raise FileNotFoundError(f"no Eccel instances found in {static_root}")
-        for static_path in static_paths:
+        dynamic_root = _source_pair_root(source, source_family) / "json_dynamic_instances"
+        for static_path in static_paths_by_family[source_family]:
             dynamic_path = dynamic_root / static_path.name
             if not dynamic_path.is_file():
                 raise FileNotFoundError(f"missing dynamic pair: {dynamic_path}")

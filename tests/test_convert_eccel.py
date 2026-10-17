@@ -36,3 +36,13 @@ def test_converter_requires_exact_source_instance_set(
     with pytest.raises(ValueError, match=message):
         convert(source, output, "test-version")
     assert not output.exists()
+
+
+def test_converter_rejects_source_contents_that_differ_from_pin(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    output = tmp_path / "collection"
+    _source_fixture(source)
+
+    with pytest.raises(ValueError, match="do not match the pinned"):
+        convert(source, output, "test-version")
+    assert not output.exists()

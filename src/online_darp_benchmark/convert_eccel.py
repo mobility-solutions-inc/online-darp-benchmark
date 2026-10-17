@@ -13,6 +13,7 @@ from .parquet_collection import (
     FORMAT_VERSION,
     SCHEMA_VERSION,
     artifact_record,
+    canonical_sha256,
     dump_yaml,
     physical_problem_sha256,
     sha256_file,
@@ -48,6 +49,9 @@ EXPECTED_INSTANCE_STEMS = {
     ),
 }
 EXPECTED_INSTANCE_COUNT = 68
+# canonical_sha256 of the sorted [source-relative path, SHA-256] pairs for all
+# 136 static and dynamic DDARP files at SOURCE_COMMIT.
+PINNED_SOURCE_TREE_SHA256 = "b501c2f6cd75020c1712c1b606fec2bd904cf1d4c8f5c8de4aeac39667936044"
 
 CITATIONS_BIB = """@dataset{eccel2020instances,
   author = {Eccel, Renan Artur Lopes},
@@ -246,7 +250,18 @@ def _write_component(
     )
 
 
-def _static_paths(source: Path) -> dict[str, list[Path]]:
+def _source_tree_sha256(source: Path, paths_by_family: dict[str, list[Path]]) -> str:
+    pairs = []
+    for source_family, static_paths in paths_by_family.items():
+        dynamic_root = _source_pair_root(source, source_family) / "json_dynamic_instances"
+        for static_path in static_paths:
+            for path in (static_path, dynamic_root / static_path.name):
+                if path.is_file():
+                    pairs.append([path.relative_to(source).as_posix(), sha256_file(path)])
+    return canonical_sha256(sorted(pairs))
+
+
+def _static_paths(source: Path, enforce_pins: bool = True) -> dict[str, list[Path]]:
     """Return each family's static files, requiring exactly the pinned source set."""
 
     paths_by_family: dict[str, list[Path]] = {}
@@ -266,10 +281,19 @@ def _static_paths(source: Path) -> dict[str, list[Path]]:
             f"Eccel {SOURCE_RELEASE} source must contain exactly "
             f"{EXPECTED_INSTANCE_COUNT} DDARP instances:\n" + "\n".join(failures)
         )
+    if enforce_pins and (
+        _source_tree_sha256(source, paths_by_family) != PINNED_SOURCE_TREE_SHA256
+    ):
+        raise ValueError(
+            f"Eccel source files do not match the pinned {SOURCE_RELEASE} contents "
+            f"at commit {SOURCE_COMMIT}"
+        )
     return paths_by_family
 
 
-def convert(source: Path, output: Path, converter_version: str) -> dict[str, Any]:
+def convert(
+    source: Path, output: Path, converter_version: str, *, enforce_pins: bool = True
+) -> dict[str, Any]:
     """Convert all 68 DDARP physical instances and paired reveal schedules."""
 
     if (output / "collection.yaml").exists():
@@ -277,7 +301,7 @@ def convert(source: Path, output: Path, converter_version: str) -> dict[str, Any
     artifacts: dict[str, Any] = {}
     instance_paths: list[str] = []
     source_checksums: list[tuple[str, str]] = []
-    static_paths_by_family = _static_paths(source)
+    static_paths_by_family = _static_paths(source, enforce_pins)
 
     for source_family, normalized_family in FAMILIES.items():
         dynamic_root = _source_pair_root(source, source_family) / "json_dynamic_instances"

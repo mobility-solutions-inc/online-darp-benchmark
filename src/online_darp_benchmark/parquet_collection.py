@@ -5,13 +5,20 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
+import shutil
+import struct
 import sys
+import tempfile
 import unicodedata
-from collections.abc import Mapping, Sequence
+import urllib.request
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import pyarrow as pa
+import pyarrow.compute as pc
 import pyarrow.parquet as pq
 import yaml
 
@@ -237,6 +244,10 @@ SORT_KEYS = {
 class CollectionValidationError(ValueError):
     """Raised when a normalized collection violates RFC-0001."""
 
+    def __init__(self, report: dict[str, Any]) -> None:
+        super().__init__(yaml.safe_dump(report, sort_keys=False))
+        self.report = report
+
 
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
@@ -426,9 +437,40 @@ def _geo_metadata_errors(metadata: Mapping[bytes, bytes]) -> list[str]:
     errors = []
     if geo.get("version") != "1.1.0" or column.get("encoding") != "WKB":
         errors.append("GeoParquet metadata must be version 1.1.0 with WKB encoding")
+    if geo.get("primary_column") != "geometry" or column.get("geometry_types") != ["Point"]:
+        errors.append("GeoParquet primary column must be a Point `geometry` column")
     if not isinstance(column.get("crs"), dict):
         errors.append("GeoParquet crs must be an explicit PROJJSON object")
     return errors
+
+
+def _is_point_wkb(value: bytes) -> bool:
+    """Return whether *value* is a 2D WKB Point with finite coordinates."""
+
+    if len(value) != 21 or value[0] not in (0, 1):
+        return False
+    order = "<" if value[0] == 1 else ">"
+    geometry_type, x, y = struct.unpack(f"{order}Idd", value[1:])
+    return geometry_type == 1 and math.isfinite(x) and math.isfinite(y)
+
+
+def _download_uri(uri: str, directory: Path) -> Path:
+    """Download an immutable HTTPS artifact into *directory*."""
+
+    target = directory / hashlib.sha256(uri.encode()).hexdigest()
+    request = urllib.request.Request(uri, headers={"User-Agent": "online-darp-benchmark"})
+    with urllib.request.urlopen(request) as response, target.open("wb") as output:
+        shutil.copyfileobj(response, output, length=1024 * 1024)
+    return target
+
+
+def _uri_error(uri: str) -> str | None:
+    parts = urlsplit(uri)
+    if parts.scheme != "https" or not parts.netloc:
+        return "artifact uri must be an absolute https URL"
+    if "latest" in parts.path.lower().split("/"):
+        return "artifact uri must not be an unversioned latest URL"
+    return None
 
 
 def _artifact_table(
@@ -436,6 +478,7 @@ def _artifact_table(
     collection: Mapping[str, Any],
     artifact_id: str,
     errors: list[str],
+    fetch_uri: Callable[[str], Path],
 ) -> pa.Table | None:
     artifact = collection["artifacts"].get(artifact_id)
     if artifact is None:
@@ -443,22 +486,36 @@ def _artifact_table(
         return None
     tables: list[pa.Table] = []
     for file_record in artifact["files"]:
-        path = _package_path(root, file_record["path"])
-        if path is None:
-            errors.append(f"artifact path escapes collection root: {file_record['path']}")
+        if ("path" in file_record) == ("uri" in file_record):
+            errors.append(f"{artifact_id}: file locator must be exactly one of path or uri")
             continue
-        if not path.is_file():
-            errors.append(f"missing artifact file: {file_record['path']}")
-            continue
+        locator = file_record.get("path") or file_record["uri"]
+        if "path" in file_record:
+            path = _package_path(root, file_record["path"])
+            if path is None:
+                errors.append(f"artifact path escapes collection root: {locator}")
+                continue
+            if not path.is_file():
+                errors.append(f"missing artifact file: {locator}")
+                continue
+        else:
+            if uri_error := _uri_error(locator):
+                errors.append(f"{uri_error}: {locator}")
+                continue
+            try:
+                path = fetch_uri(locator)
+            except OSError as error:
+                errors.append(f"unretrievable artifact uri: {locator}: {error}")
+                continue
         if path.stat().st_size != file_record["byte_size"]:
-            errors.append(f"byte size mismatch: {file_record['path']}")
+            errors.append(f"byte size mismatch: {locator}")
         if sha256_file(path) != file_record["sha256"]:
-            errors.append(f"SHA-256 mismatch: {file_record['path']}")
+            errors.append(f"SHA-256 mismatch: {locator}")
         try:
             parquet_file = pq.ParquetFile(path)
             table = parquet_file.read()
         except (OSError, pa.ArrowException) as error:
-            errors.append(f"unreadable Parquet artifact: {file_record['path']}: {error}")
+            errors.append(f"unreadable Parquet artifact: {locator}: {error}")
             continue
         metadata = parquet_file.schema_arrow.metadata or {}
         required_metadata = {
@@ -470,36 +527,69 @@ def _artifact_table(
         }
         for key, expected in required_metadata.items():
             if metadata.get(key) != expected:
-                errors.append(f"metadata mismatch for {key.decode()}: {file_record['path']}")
+                errors.append(f"metadata mismatch for {key.decode()}: {locator}")
         if artifact.get("spatial_profile") == "geographic":
             errors.extend(
-                f"{message}: {file_record['path']}"
-                for message in _geo_metadata_errors(metadata)
+                f"{message}: {locator}" for message in _geo_metadata_errors(metadata)
             )
+            if "geometry" in table.column_names and not all(
+                isinstance(value, bytes) and _is_point_wkb(value)
+                for value in table.column("geometry").to_pylist()
+            ):
+                errors.append(f"geometry values must be finite 2D WKB Points: {locator}")
         if table.num_rows != file_record["row_count"]:
-            errors.append(f"row count mismatch: {file_record['path']}")
+            errors.append(f"row count mismatch: {locator}")
         expected_schema = _schema_for(
             artifact["schema_name"], artifact.get("spatial_profile")
         ).remove_metadata()
         if not table.schema.remove_metadata().equals(expected_schema, check_metadata=False):
-            errors.append(f"schema mismatch: {file_record['path']}")
+            errors.append(f"schema mismatch: {locator}")
+        for name in table.column_names:
+            column = table.column(name)
+            if (
+                pa.types.is_floating(column.type)
+                and pc.all(pc.is_finite(column)).as_py() is False
+            ):
+                errors.append(f"non-finite {name} values: {locator}")
         tables.append(table)
     return pa.concat_tables(tables) if tables else None
 
 
-def validate_collection(root: Path) -> dict[str, Any]:
-    """Validate package integrity, tables, joins, and core DARP semantics."""
+def validate_collection(
+    root: Path, *, fetch_uri: Callable[[str], Path] | None = None
+) -> dict[str, Any]:
+    """Validate package integrity, tables, joins, and core DARP semantics.
 
+    External ``uri`` artifacts are downloaded over HTTPS by default; *fetch_uri*
+    may supply another retriever that returns a local file for a URI.
+    """
+
+    with tempfile.TemporaryDirectory(prefix="odb-validate-") as download_directory:
+        return _validate_collection(
+            root,
+            fetch_uri or (lambda uri: _download_uri(uri, Path(download_directory))),
+        )
+
+
+def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[str, Any]:
     collection_path = root / "collection.yaml"
     collection = yaml.safe_load(collection_path.read_text(encoding="utf-8"))
     errors: list[str] = []
     warnings: list[str] = []
     if collection.get("format_version") != FORMAT_VERSION:
         errors.append(f"unsupported format_version: {collection.get('format_version')}")
+    for notice_path in collection.get("license", {}).get("notice_paths", []):
+        resolved = _package_path(root, notice_path)
+        if resolved is None:
+            errors.append(f"license notice path escapes collection root: {notice_path}")
+        elif not resolved.is_file():
+            errors.append(f"missing license notice: {notice_path}")
 
     cache: dict[str, pa.Table | None] = {}
     for artifact_id in collection.get("artifacts", {}):
-        cache[artifact_id] = _artifact_table(root, collection, artifact_id, errors)
+        cache[artifact_id] = _artifact_table(
+            root, collection, artifact_id, errors, fetch_uri
+        )
 
     dictionaries = {
         artifact_id: table.to_pydict() if table is not None else None
@@ -517,6 +607,12 @@ def validate_collection(root: Path) -> dict[str, Any]:
             errors.append(f"missing instance manifest: {relative_manifest}")
             continue
         instance = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+        if instance.get("format_version") != FORMAT_VERSION:
+            errors.append(
+                f"{relative_manifest}: unsupported format_version: "
+                f"{instance.get('format_version')}"
+            )
+            continue
         components = instance.get("components", {})
         values = {role: dictionaries.get(artifact_id) for role, artifact_id in components.items()}
         if any(value is None for value in values.values()):
@@ -656,6 +752,42 @@ def validate_collection(root: Path) -> dict[str, Any]:
             if any(value is not None and value < 0 for value in travel["distance_mm"]):
                 errors.append(f"{relative_manifest}: negative travel distance")
 
+        feasibility_key = ("request-feasibility", request_id, components["travel_times"])
+        if (
+            feasibility_key not in checked_relationships
+            and len(travel["travel_time_ms"]) == node_count * node_count
+        ):
+            checked_relationships.add(feasibility_key)
+            window_rows: list[int] = []
+            ride_rows: list[int] = []
+            for row, (pickup, dropoff) in enumerate(
+                zip(requests["pickup_node_index"], requests["dropoff_node_index"], strict=True)
+            ):
+                if not (0 <= pickup < node_count and 0 <= dropoff < node_count):
+                    continue
+                direct = travel["travel_time_ms"][pickup * node_count + dropoff]
+                earliest_arrival = (
+                    requests["earliest_pickup_time_ms"][row]
+                    + requests["pickup_service_time_ms"][row]
+                    + direct
+                )
+                latest_dropoff = requests["latest_dropoff_time_ms"][row]
+                if latest_dropoff is not None and earliest_arrival > latest_dropoff:
+                    window_rows.append(row)
+                max_ride = requests["max_ride_time_ms"][row]
+                if max_ride is not None and direct > max_ride:
+                    ride_rows.append(row)
+            if window_rows:
+                errors.append(
+                    f"{relative_manifest}: {len(window_rows)} request(s) cannot reach "
+                    f"drop-off by latest_dropoff_time_ms, first row {window_rows[0]}"
+                )
+            if ride_rows:
+                errors.append(
+                    f"{relative_manifest}: {len(ride_rows)} request(s) have direct travel "
+                    f"longer than max_ride_time_ms, first row {ride_rows[0]}"
+                )
+
         request_nodes_key = ("request-nodes", request_id, components["nodes"])
         if request_nodes_key not in checked_relationships:
             checked_relationships.add(request_nodes_key)
@@ -744,7 +876,7 @@ def validate_collection(root: Path) -> dict[str, Any]:
         "warnings": warnings,
     }
     if errors:
-        raise CollectionValidationError(yaml.safe_dump(report, sort_keys=False))
+        raise CollectionValidationError(report)
     return report
 
 
@@ -759,7 +891,12 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         report = validate_collection(args.collection)
-    except (OSError, KeyError, TypeError, yaml.YAMLError, CollectionValidationError) as error:
+    except CollectionValidationError as error:
+        if args.report:
+            args.report.write_text(str(error), encoding="utf-8")
+        print(error, file=sys.stderr)
+        return 1
+    except (OSError, KeyError, TypeError, yaml.YAMLError) as error:
         print(error, file=sys.stderr)
         return 1
     rendered = yaml.safe_dump(report, sort_keys=False)

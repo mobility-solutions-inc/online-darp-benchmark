@@ -36,8 +36,9 @@ request.
 
 Provide the result manifest, canonical event log, immutable algorithm artifact,
 exact invocation, fixed seeds, hardware, and disclosures for the internal
-objective, prediction data, tuning, and relocation. Missing, failed, and
-unsupported configurations remain part of the record.
+objective, solver and access requirements, prediction data, tuning, and
+relocation. Missing, failed, and unsupported configurations remain part of the
+record.
 
 Declare whether the evaluated code is publicly available. If it is, include a
 direct `public_code_url`, preferably pinned to the evaluated commit; otherwise

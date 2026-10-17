@@ -146,15 +146,24 @@ def validate_result_semantics(path: Path, document: dict[str, Any]) -> None:
     uses_external_solver = any(
         component["component_type"] == "solver" for component in stack["components"]
     )
-    if not uses_external_solver and document["run"]["run_status"] == "completed":
-        computation = document["metrics"]["computation"]
-        for field in (
+    if document["run"]["run_status"] == "completed":
+        metrics = document["metrics"]
+        computation = metrics["computation"]
+        solver_fields = (
             "external_solver_calls",
             "external_solver_wall_time_seconds",
             "external_solver_time_limit_hits",
-        ):
-            if computation[field] != 0:
+        )
+        for field in solver_fields:
+            if not uses_external_solver and computation[field] != 0:
                 failures.append(f"{field} must be zero when no external solver is disclosed")
+        unavailable = [field for field in solver_fields if computation[field] is None]
+        notes = metrics.get("notes")
+        if unavailable and not (isinstance(notes, str) and notes.strip()):
+            failures.append(
+                "metrics.notes must explain unavailable solver metrics: "
+                + ", ".join(unavailable)
+            )
 
     certificate = document.get("offline_certificate")
     if certificate is not None and not any(

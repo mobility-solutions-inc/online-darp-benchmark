@@ -146,6 +146,30 @@ def test_offline_certificate_must_match_disclosed_component(
             validate_manifest(path, "result")
 
 
+@pytest.mark.parametrize(
+    ("notes", "valid"),
+    [(None, False), (" ", False), ("Solver API hides call counts.", True)],
+)
+def test_unavailable_solver_metrics_require_notes(
+    tmp_path: Path, notes: str | None, valid: bool
+) -> None:
+    document = deepcopy(load_document(ROOT / "examples/result.yaml"))
+    document["algorithm"]["optimization_stack"] = {
+        "uses_external_components": True,
+        "components": [optimization_component()],
+        "notes": None,
+    }
+    document["metrics"]["computation"]["external_solver_calls"] = None
+    document["metrics"]["notes"] = notes
+    path = tmp_path / "result.yaml"
+    path.write_text(yaml_dump(document), encoding="utf-8")
+    if valid:
+        validate_manifest(path, "result")
+    else:
+        with pytest.raises(ValidationFailure, match="must explain unavailable"):
+            validate_manifest(path, "result")
+
+
 def optimization_component():
     return {
         "component_id": "example-solver",

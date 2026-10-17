@@ -160,7 +160,8 @@ The result schema enforces:
   explicit;
 - `private` components are not publicly obtainable;
 - solver-call metrics are zero for a completed run whose stack discloses no
-  `solver` component; and
+  `solver` component;
+- `metrics.notes` explains any solver-call metric that is `null`; and
 - an offline certificate names a disclosed component, by `name` or
   `component_id`, with the same version.
 

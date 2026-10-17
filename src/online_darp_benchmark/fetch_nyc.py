@@ -9,7 +9,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from .convert_nyc import DYNAMIC_IPS_COMMIT, SOURCE_ARCHIVE_SHA256
+from .convert_nyc import DYNAMIC_IPS_COMMIT, SOURCE_ARCHIVE_SHA256, verify_source
 
 
 ARCHIVE_URL = (
@@ -67,6 +67,9 @@ def fetch(output: Path, local_archive: Path | None = None) -> Path:
             destination = warm_root / filename
             if not destination.exists():
                 _download(f"{MEDIA_ROOT}/{filename}", destination)
+    # An existing extracted tree or warm-start file is reused only if every file
+    # the converter reads still matches the pinned source.
+    verify_source(source_root)
     return source_root
 
 

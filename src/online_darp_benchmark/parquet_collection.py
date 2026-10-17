@@ -626,6 +626,18 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
         travel = values["travel_times"]
         node_count = len(nodes["node_index"])
 
+        declared_profile = (instance.get("spatial") or {}).get("profile")
+        node_profile = collection["artifacts"][components["nodes"]].get(
+            "spatial_profile", "matrix_only"
+        )
+        if declared_profile != node_profile:
+            errors.append(
+                f"{relative_manifest}: spatial.profile {declared_profile!r} does not "
+                f"match nodes artifact profile {node_profile!r}"
+            )
+        if requests["request_index"] and not vehicles["vehicle_index"]:
+            errors.append(f"{relative_manifest}: requests have no vehicles to serve them")
+
         for role, index_name, id_name in (
             ("requests", "request_index", "request_id"),
             ("vehicles", "vehicle_index", "vehicle_id"),

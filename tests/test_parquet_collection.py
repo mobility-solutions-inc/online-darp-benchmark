@@ -33,6 +33,8 @@ def _write_collection(
     node_x: float | None = None,
     instance_format_version: str = FORMAT_VERSION,
     notice_paths: list[str] | None = None,
+    spatial_profile: str | None = None,
+    vehicle_rows: int | None = None,
 ) -> None:
     collection_id = "test-collection"
     artifacts = {}
@@ -105,6 +107,8 @@ def _write_collection(
         tables["onboard_requests"] = onboard_requests
     if reveal_rows is not None:
         tables["reveal_times"] = tables["reveal_times"][:reveal_rows]
+    if vehicle_rows is not None:
+        tables["vehicles"] = tables["vehicles"][:vehicle_rows]
     node_profile = "matrix_only"
     if node_x is not None:
         node_profile = "abstract_cartesian"
@@ -145,6 +149,7 @@ def _write_collection(
         "collection_id": collection_id,
         "components": components,
         "time": {"service_horizon_ms": 300_000},
+        "spatial": {"profile": spatial_profile or node_profile},
         "relocation": {"allowed": True},
     }
     dump_yaml(tmp_path / manifest_path, instance)
@@ -435,3 +440,15 @@ def test_point_wkb_validation() -> None:
     assert not _is_point_wkb(struct.pack("<BIdd", 1, 2, -73.9, 40.7))
     assert not _is_point_wkb(struct.pack("<BIdd", 1, 1, float("nan"), 40.7))
     assert not _is_point_wkb(b"\x01\x01\x00")
+
+
+def test_validator_rejects_mismatched_spatial_profile(tmp_path: Path) -> None:
+    _write_collection(tmp_path, spatial_profile="geographic")
+    with pytest.raises(CollectionValidationError, match="does not match nodes artifact"):
+        validate_collection(tmp_path)
+
+
+def test_validator_rejects_demand_without_vehicles(tmp_path: Path) -> None:
+    _write_collection(tmp_path, vehicle_rows=0)
+    with pytest.raises(CollectionValidationError, match="no vehicles to serve them"):
+        validate_collection(tmp_path)

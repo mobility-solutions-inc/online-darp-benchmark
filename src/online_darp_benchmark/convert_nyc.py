@@ -16,6 +16,7 @@ from .parquet_collection import (
     FORMAT_VERSION,
     OGC_CRS84_PROJJSON,
     artifact_record,
+    canonical_sha256,
     dump_yaml,
     physical_problem_sha256,
     sha256_file,
@@ -28,6 +29,9 @@ SOURCE_RELEASE = "v1.0"
 SOURCE_RECORD = "20452171"
 SOURCE_ARCHIVE_SHA256 = "2e52d138260951d29b4a0b084a86a7122a24cfe40c357a7252739add51db2401"
 DYNAMIC_IPS_COMMIT = "c7ba9948501f58babf4d8112e00f821a5b8185b6"
+# canonical_sha256 of the sorted [source-relative path, SHA-256] pairs for every
+# source file the converter reads from the pinned archive and warm-start files.
+PINNED_SOURCE_TREE_SHA256 = "cae789be96f4ec55b09417faade66e3fc3a2c0e425592a606bb484ad19240891"
 SERVICE_TIME_MS = 30_000
 NYC_TIME_ZONE = ZoneInfo("America/New_York")
 INSTANCE_PATTERN = re.compile(r"^(?P<date>\d{8})_(?P<hour>\d{2})-(?P<minutes>\d+)m$")
@@ -213,8 +217,8 @@ def _demand(
     origin = datetime(date.year, date.month, date.day, hour, tzinfo=NYC_TIME_ZONE)
     simulation_start_seconds = hour * 3600
 
-    metadata_path = next(instance_root.glob("INSTANCE_*.txt"))
-    trip_path = next(instance_root.glob("TRIP_*.txt"))
+    metadata_path = sorted(instance_root.glob("INSTANCE_*.txt"))[0]
+    trip_path = sorted(instance_root.glob("TRIP_*.txt"))[0]
     metadata = _instance_metadata(metadata_path)
     if int(float(metadata["SIMULATION_START"])) != simulation_start_seconds:
         raise ValueError(f"{slug}: simulation start does not match instance name")
@@ -450,9 +454,49 @@ def _warm_fleet(
     return {"slug": fleet_slug, "vehicles": vehicle_id, "onboard_requests": onboard_id}
 
 
-def convert(source: Path, output: Path, converter_version: str) -> dict[str, Any]:
+def _used_source_paths(source: Path) -> list[Path]:
+    """List every source file the converter reads."""
+
+    benchmark_root = source / "3_Benchmark_instances"
+    paths = [
+        source / "1_Network" / "virtual_stops_latlon.geojson",
+        source / "1_Network" / "edge_time_matrix.txt",
+    ]
+    for family in sorted(benchmark_root.glob("Instances_*")):
+        for instance_root in sorted(path for path in family.iterdir() if path.is_dir()):
+            paths.extend(sorted(instance_root.glob("INSTANCE_*.txt"))[:1])
+            paths.extend(sorted(instance_root.glob("TRIP_*.txt"))[:1])
+    paths.extend((benchmark_root / "vehicles_uniform").glob("*.txt"))
+    paths.extend((benchmark_root / "vehicles_warmStart_11").glob("*.txt"))
+    return paths
+
+
+def _source_checksums(source: Path) -> list[tuple[str, str]]:
+    return sorted(
+        (sha256_file(path), path.relative_to(source).as_posix())
+        for path in _used_source_paths(source)
+        if path.is_file()
+    )
+
+
+def verify_source(source: Path) -> None:
+    """Fail unless *source* holds exactly the pinned NYC-DARP source files."""
+
+    pairs = sorted([path, digest] for digest, path in _source_checksums(source))
+    if canonical_sha256(pairs) != PINNED_SOURCE_TREE_SHA256:
+        raise ValueError(
+            f"NYC source files in {source} do not match the pinned archive "
+            f"{SOURCE_ARCHIVE_SHA256} and dynamic-ips commit {DYNAMIC_IPS_COMMIT}"
+        )
+
+
+def convert(
+    source: Path, output: Path, converter_version: str, *, enforce_pins: bool = True
+) -> dict[str, Any]:
     if (output / "collection.yaml").exists():
         raise FileExistsError(f"refusing to replace existing collection: {output}")
+    if enforce_pins:
+        verify_source(source)
     artifacts: dict[str, Any] = {}
     network_components = _network(source, output, artifacts)
 
@@ -563,17 +607,7 @@ def convert(source: Path, output: Path, converter_version: str) -> dict[str, Any
     (license_root / "upstream-notices.md").write_text(UPSTREAM_NOTICES, encoding="utf-8")
     (output / "citations.bib").write_text(CITATIONS_BIB, encoding="utf-8")
 
-    used_sources = [
-        source / "1_Network" / "virtual_stops_latlon.geojson",
-        source / "1_Network" / "edge_time_matrix.txt",
-        *(demand["trip_path"] for demand in demands),
-        *(demand["metadata_path"] for demand in demands),
-        *(benchmark_root / "vehicles_uniform").glob("*.txt"),
-        *warm_root.glob("*.txt"),
-    ]
-    source_checksums = sorted(
-        (sha256_file(path), path.relative_to(source).as_posix()) for path in used_sources
-    )
+    source_checksums = _source_checksums(source)
     provenance_root = output / "provenance"
     provenance_root.mkdir(parents=True, exist_ok=True)
     (provenance_root / "source-checksums.sha256").write_text(

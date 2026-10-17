@@ -971,12 +971,21 @@ def _onboard_route_errors(
             for node in drop_nodes
         }
         services = sorted(onboard["dropoff_service_time_ms"][row] for row in rows)
-        base = leave if drop_nodes - {start_node} else shift_start
-        finish = (
-            base
-            + sum(entry_costs.values())
+        work = (
+            sum(entry_costs.values())
             + sum(services)
             + (min(end_leg(node) for node in drop_nodes) if end_node is not None else 0)
+        )
+        # Drop-offs at the start node can be served while waiting to leave.
+        at_start = sum(
+            onboard["dropoff_service_time_ms"][row]
+            for row in rows
+            if onboard["dropoff_node_index"][row] == start_node
+        )
+        finish = (
+            max(shift_start + work, leave + work - at_start)
+            if drop_nodes - {start_node}
+            else shift_start + work
         )
         if finish > shift_end or (
             max_duration is not None and finish - route_start > max_duration
@@ -1002,13 +1011,22 @@ def _onboard_route_errors(
         if node_deadlines:
             costs = sorted(entry_costs.values())
             stop_services = sorted(node_services.values())
+            # After leaving, only non-start stops' services remain; at most one
+            # earlier stop (the start node) can be served before leaving.
+            away_services = sorted(
+                service for node, service in node_services.items() if node != start_node
+            )
+            start_stops = 1 if start_node in node_services else 0
             for index, deadline in enumerate(sorted(node_deadlines.values())):
                 travel_so_far = sum(costs[: index + 1])
-                earliest = (
-                    (leave if travel_so_far else shift_start)
-                    + travel_so_far
-                    + sum(stop_services[:index])
-                )
+                earliest = shift_start + travel_so_far + sum(stop_services[:index])
+                if travel_so_far:
+                    earliest = max(
+                        earliest,
+                        leave
+                        + travel_so_far
+                        + sum(away_services[: max(0, index - start_stops)]),
+                    )
                 if deadline < earliest:
                     late += 1
                     break
@@ -1113,7 +1131,32 @@ def _shared_route_finish(
         pc.or_(pc.not_equal(pickup, start_node), pc.not_equal(dropoff, start_node)),
         pa.scalar(bool(drop_nodes - {start_node})),
     )
-    return pc.add(pc.if_else(leaves, leave, departure), total)
+    # Service at the start node can happen while waiting to leave: onboard
+    # drop-offs there, the new pickup there, and its drop-off if both are there.
+    pickup_at_start = pc.equal(pickup, start_node)
+    before_leaving = pc.add(
+        pc.if_else(
+            pickup_at_start,
+            pc.subtract(remaining["pickup_and_ride"], remaining["direct"]),
+            0,
+        ),
+        pc.if_else(
+            pc.and_(pickup_at_start, pc.equal(dropoff, start_node)),
+            remaining["dropoff_service"],
+            0,
+        ),
+    )
+    before_leaving = pc.add(
+        before_leaving, sum(service for node, service, *_ in drops if node == start_node)
+    )
+    return pc.max_element_wise(
+        pc.add(departure, total),
+        pc.if_else(
+            leaves,
+            pc.add(leave, pc.subtract(total, before_leaving)),
+            pc.add(departure, total),
+        ),
+    )
 
 
 def _seat_release_lower_bound(
@@ -1128,16 +1171,17 @@ def _seat_release_lower_bound(
 ) -> pa.ChunkedArray:
     """Lower-bound the time after *departure* to reach each pickup with enough seats.
 
-    A rider cannot be dropped before their pickup departure, so each detour
-    first waits for the rider it releases (or the earliest onboard departure
-    when several parties must be released).
+    A rider cannot be dropped before their pickup departure. A rider alighting
+    at the start node waits only for themself; any detour that leaves the start
+    node waits for every onboard rider. *to_pickup* already includes that wait
+    for pickups away from the start, so the result is never below it.
     """
 
-    # Leaving the start node waits for every onboard rider to depart.
     leave_wait = max(0, max(drop[3] for drop in drops) - departure)
 
-    def wait_for(rider_departure: int) -> int:
-        return max(leave_wait, rider_departure - departure)
+    def wait_for(node: int, rider_departure: int) -> int:
+        own = max(0, rider_departure - departure)
+        return own if node == start_node else max(leave_wait, own)
 
     first_leg = min(times[start_node * node_count + node].as_py() for node, *_ in drops)
     last_leg = None
@@ -1147,10 +1191,13 @@ def _seat_release_lower_bound(
         last_leg = from_drop if last_leg is None else pc.min_element_wise(last_leg, from_drop)
         via = pc.add(
             from_drop,
-            wait_for(rider_departure) + times[start_node * node_count + node].as_py() + service,
+            wait_for(node, rider_departure)
+            + times[start_node * node_count + node].as_py()
+            + service,
         )
         single_detour = via if single_detour is None else pc.min_element_wise(single_detour, via)
-    first_leg += wait_for(min(rider_departure for *_, rider_departure in drops))
+    if all(node != start_node for node, *_ in drops):
+        first_leg += leave_wait
     largest_parties = sorted((party for _, _, party, _ in drops), reverse=True)
     smallest_services = sorted(service for _, service, _, _ in drops)
     released = [sum(largest_parties[:count]) for count in range(1, len(drops) + 1)]
@@ -1166,6 +1213,8 @@ def _seat_release_lower_bound(
             else pc.add(pc.add(last_leg, first_leg), sum(smallest_services[:count]))
         )
         bound = pc.if_else(pc.less_equal(shortage, released[count - 1]), stops, bound)
+    # Reaching a pickup away from the start still requires leaving it.
+    bound = pc.max_element_wise(bound, to_pickup)
     return pc.if_else(pc.greater(shortage, 0), bound, to_pickup)
 
 

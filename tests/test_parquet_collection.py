@@ -1288,3 +1288,51 @@ def test_colocated_onboard_riders_arrive_together(tmp_path: Path) -> None:
         ],
     )
     assert validate_collection(tmp_path)["valid"] is True
+
+
+def test_start_node_request_is_served_while_waiting_to_leave(tmp_path: Path) -> None:
+    # The new request is served at the start before the 100 s departure; then the
+    # onboard drop-off takes 30 s, ending at 130 s within the 140 s shift.
+    _write_collection(
+        tmp_path,
+        vehicle_overrides={
+            "initial_load": 1,
+            "end_node_index": None,
+            "shift_end_time_ms": 140_000,
+        },
+        request_overrides={
+            "dropoff_node_index": 0,
+            "pickup_service_time_ms": 10_000,
+            "dropoff_service_time_ms": 10_000,
+        },
+        onboard_requests=[
+            _onboard_request(
+                earliest_pickup_time_ms=100_000,
+                pickup_time_ms=100_000,
+                pickup_departure_time_ms=100_000,
+            )
+        ],
+    )
+    assert validate_collection(tmp_path)["valid"] is True
+
+
+def test_start_node_seat_release_ignores_unrelated_departures(tmp_path: Path) -> None:
+    # A rider alighting at the start frees a seat at 0 s; the other leaves at 100 s.
+    _write_collection(
+        tmp_path,
+        vehicle_overrides={"seat_capacity": 2, "initial_load": 2},
+        request_overrides={"dropoff_node_index": 0, "latest_pickup_time_ms": 50_000},
+        onboard_requests=[
+            _onboard_request(
+                onboard_request_index=0, onboard_request_id="onboard-0", dropoff_node_index=0
+            ),
+            _onboard_request(
+                onboard_request_index=1,
+                onboard_request_id="onboard-1",
+                earliest_pickup_time_ms=100_000,
+                pickup_time_ms=100_000,
+                pickup_departure_time_ms=100_000,
+            ),
+        ],
+    )
+    assert validate_collection(tmp_path)["valid"] is True

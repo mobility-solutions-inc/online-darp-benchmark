@@ -983,25 +983,31 @@ def _onboard_route_errors(
         ):
             overloaded += 1
 
-        # Ride deadlines: the j-th drop-off in any order happens no earlier than
-        # the j smallest entry costs and j - 1 smallest services after leaving,
-        # so the j-th earliest deadline must be at least that late. A node shared
-        # by several riders is entered once; the others add no travel.
-        deadlines = sorted(
-            onboard["pickup_departure_time_ms"][row] + onboard["max_ride_time_ms"][row]
-            for row in rows
-            if onboard["max_ride_time_ms"][row] is not None
-        )
-        if deadlines:
-            costs = sorted(
-                list(entry_costs.values()) + [0] * (len(rows) - len(entry_costs))
+        # Ride deadlines, per distinct drop-off node (riders there arrive
+        # together): in any order, the j-th node is reached no earlier than the
+        # j smallest entry costs plus the j - 1 smallest per-node service totals,
+        # so the j-th earliest node deadline must be at least that late.
+        node_deadlines: dict[int, int] = {}
+        node_services: dict[int, int] = {}
+        for row in rows:
+            node = onboard["dropoff_node_index"][row]
+            node_services[node] = (
+                node_services.get(node, 0) + onboard["dropoff_service_time_ms"][row]
             )
-            for index, deadline in enumerate(deadlines):
+            if onboard["max_ride_time_ms"][row] is not None:
+                deadline = (
+                    onboard["pickup_departure_time_ms"][row] + onboard["max_ride_time_ms"][row]
+                )
+                node_deadlines[node] = min(deadline, node_deadlines.get(node, deadline))
+        if node_deadlines:
+            costs = sorted(entry_costs.values())
+            stop_services = sorted(node_services.values())
+            for index, deadline in enumerate(sorted(node_deadlines.values())):
                 travel_so_far = sum(costs[: index + 1])
                 earliest = (
                     (leave if travel_so_far else shift_start)
                     + travel_so_far
-                    + sum(services[:index])
+                    + sum(stop_services[:index])
                 )
                 if deadline < earliest:
                     late += 1
@@ -1189,19 +1195,19 @@ def _requests_outside_fleet_shifts(
     times = travel["travel_time_ms"]
     pickup = pc.cast(requests["pickup_node_index"], pa.int64())
     dropoff = pc.cast(requests["dropoff_node_index"], pa.int64())
+    direct = pc.take(times, pc.add(pc.multiply(pickup, node_count), dropoff))
     remaining = pa.table(
         {
             "pickup": pickup,
             "dropoff": dropoff,
+            "direct": direct,
+            "max_ride": requests["max_ride_time_ms"],
             "party_size": requests["party_size"],
             "earliest": requests["earliest_pickup_time_ms"],
             "latest": requests["latest_pickup_time_ms"],
             "earliest_dropoff": requests["earliest_dropoff_time_ms"],
             "latest_dropoff": requests["latest_dropoff_time_ms"],
-            "pickup_and_ride": pc.add(
-                requests["pickup_service_time_ms"],
-                pc.take(times, pc.add(pc.multiply(pickup, node_count), dropoff)),
-            ),
+            "pickup_and_ride": pc.add(requests["pickup_service_time_ms"], direct),
             "dropoff_service": requests["dropoff_service_time_ms"],
         }
     )
@@ -1271,6 +1277,29 @@ def _requests_outside_fleet_shifts(
             )
         arrival = pc.max_element_wise(pc.add(to_pickup, departure), remaining["earliest"])
         dropoff_arrival = pc.add(arrival, remaining["pickup_and_ride"])
+        leave = max([departure] + [drop[3] for drop in drops])
+        held_ride = None
+        if leave > departure:
+            # A pickup at the start node can happen while onboard riders are still
+            # departing, but the trip to a drop-off elsewhere waits for them.
+            held = pc.and_(
+                pc.equal(remaining["pickup"], start_node),
+                pc.not_equal(remaining["dropoff"], start_node),
+            )
+            dropoff_arrival = pc.if_else(
+                held,
+                pc.max_element_wise(dropoff_arrival, pc.add(remaining["direct"], leave)),
+                dropoff_arrival,
+            )
+            # Delaying the pickup toward the leave time shortens the held wait.
+            pickup_service = pc.subtract(remaining["pickup_and_ride"], remaining["direct"])
+            held_wait = pc.max_element_wise(
+                pc.fill_null(
+                    pc.subtract(leave, pc.add(remaining["latest"], pickup_service)), 0
+                ),
+                0,
+            )
+            held_ride = pc.if_else(held, pc.add(remaining["direct"], held_wait), 0)
         finish = pc.add(
             pc.max_element_wise(
                 dropoff_arrival, pc.fill_null(remaining["earliest_dropoff"], dropoff_arrival)
@@ -1314,6 +1343,10 @@ def _requests_outside_fleet_shifts(
         if max_duration is not None:
             served = pc.and_(
                 served, pc.less_equal(pc.add(driving, elapsed_before_start), max_duration)
+            )
+        if held_ride is not None:
+            served = pc.and_(
+                served, pc.fill_null(pc.less_equal(held_ride, remaining["max_ride"]), True)
             )
         if drops:
             # The same route must also finish every onboard drop-off.

@@ -1251,3 +1251,40 @@ def test_onboard_ride_deadlines_hold_across_the_shared_route(tmp_path: Path) -> 
     )
     with pytest.raises(CollectionValidationError, match="in any drop-off order"):
         validate_collection(tmp_path)
+
+
+def test_start_node_pickup_still_waits_for_onboard_departure(tmp_path: Path) -> None:
+    # The pickup at the start node can happen at 0 s, but the vehicle leaves at 100 s.
+    _write_collection(
+        tmp_path,
+        vehicle_overrides={"initial_load": 1},
+        request_overrides={"latest_pickup_time_ms": 0, "latest_dropoff_time_ms": 50_000},
+        onboard_requests=[
+            _onboard_request(
+                dropoff_node_index=0,
+                earliest_pickup_time_ms=100_000,
+                pickup_time_ms=100_000,
+                pickup_departure_time_ms=100_000,
+            )
+        ],
+    )
+    with pytest.raises(CollectionValidationError, match="within its shift and limits"):
+        validate_collection(tmp_path)
+
+
+def test_colocated_onboard_riders_arrive_together(tmp_path: Path) -> None:
+    # Both riders reach node 1 at 30 s, within their 40 s limits, despite 30 s services.
+    _write_collection(
+        tmp_path,
+        vehicle_overrides={"initial_load": 2},
+        onboard_requests=[
+            _onboard_request(
+                onboard_request_index=index,
+                onboard_request_id=f"onboard-{index}",
+                dropoff_service_time_ms=30_000,
+                max_ride_time_ms=40_000,
+            )
+            for index in range(2)
+        ],
+    )
+    assert validate_collection(tmp_path)["valid"] is True

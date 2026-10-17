@@ -928,3 +928,31 @@ def test_validator_checks_unreferenced_artifacts(tmp_path: Path) -> None:
     dump_yaml(tmp_path / "collection.yaml", collection)
     with pytest.raises(CollectionValidationError, match="test.orphan-requests: party_size"):
         validate_collection(tmp_path)
+
+
+def test_positioning_starts_no_earlier_than_simulation_time_zero(tmp_path: Path) -> None:
+    # A shift that "started" 30 s before the simulation cannot pre-position the vehicle.
+    _write_collection(
+        tmp_path,
+        vehicle_overrides={"start_node_index": 1, "shift_start_time_ms": -30_000},
+        request_overrides={"latest_pickup_time_ms": 0},
+    )
+    with pytest.raises(CollectionValidationError, match="within its shift and limits"):
+        validate_collection(tmp_path)
+
+
+def test_onboard_rider_cannot_leave_before_pickup_departure(tmp_path: Path) -> None:
+    # Driving straight to drop-off and back takes 60 s, but the rider departs at 100 s.
+    _write_collection(
+        tmp_path,
+        vehicle_overrides={"initial_load": 1, "shift_end_time_ms": 70_000},
+        onboard_requests=[
+            _onboard_request(
+                earliest_pickup_time_ms=100_000,
+                pickup_time_ms=100_000,
+                pickup_departure_time_ms=100_000,
+            )
+        ],
+    )
+    with pytest.raises(CollectionValidationError, match="cannot be dropped off within"):
+        validate_collection(tmp_path)

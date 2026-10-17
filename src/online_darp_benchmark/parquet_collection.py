@@ -1000,7 +1000,9 @@ def _requests_outside_fleet_shifts(
             to_pickup = _seat_release_lower_bound(
                 remaining, to_pickup, times, node_count, start_node, capacity - load, drops
             )
-        arrival = pc.max_element_wise(pc.add(to_pickup, shift_start), remaining["earliest"])
+        # The start node is the vehicle's location at simulation time zero.
+        departure = max(shift_start, 0)
+        arrival = pc.max_element_wise(pc.add(to_pickup, departure), remaining["earliest"])
         dropoff_arrival = pc.add(arrival, remaining["pickup_and_ride"])
         finish = pc.add(
             pc.max_element_wise(
@@ -1364,33 +1366,34 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
                 for row in onboard_rows:
                     vehicle = onboard["assigned_vehicle_index"][row]
                     dropoff = onboard["dropoff_node_index"][row]
-                    # Earliest drop-off: drive straight there from the start node.
-                    arrival = (
-                        vehicles["shift_start_time_ms"][vehicle]
-                        + travel["travel_time_ms"][
-                            vehicles["start_node_index"][vehicle] * node_count + dropoff
-                        ]
+                    # Earliest drop-off: drive straight there from the start node,
+                    # leaving no earlier than the simulation start, the vehicle's
+                    # shift start, or the rider's own pickup departure.
+                    departure = max(
+                        0,
+                        vehicles["shift_start_time_ms"][vehicle],
+                        onboard["pickup_departure_time_ms"][row],
                     )
+                    to_dropoff = travel["travel_time_ms"][
+                        vehicles["start_node_index"][vehicle] * node_count + dropoff
+                    ]
                     max_ride = onboard["max_ride_time_ms"][row]
                     if (
                         max_ride is not None
-                        and arrival > onboard["pickup_departure_time_ms"][row] + max_ride
+                        and departure + to_dropoff
+                        > onboard["pickup_departure_time_ms"][row] + max_ride
                     ):
                         expired += 1
-                    remaining_work = (
-                        arrival
-                        - vehicles["shift_start_time_ms"][vehicle]
-                        + onboard["dropoff_service_time_ms"][row]
-                    )
+                    remaining_work = to_dropoff + onboard["dropoff_service_time_ms"][row]
                     end_node = vehicles["end_node_index"][vehicle]
                     if end_node is not None:
                         remaining_work += travel["travel_time_ms"][
                             dropoff * node_count + end_node
                         ]
                     max_duration = vehicles["max_route_duration_ms"][vehicle]
-                    if remaining_work + vehicles["shift_start_time_ms"][vehicle] > vehicles[
-                        "shift_end_time_ms"
-                    ][vehicle] or (max_duration is not None and remaining_work > max_duration):
+                    if departure + remaining_work > vehicles["shift_end_time_ms"][vehicle] or (
+                        max_duration is not None and remaining_work > max_duration
+                    ):
                         unreachable += 1
                 if expired:
                     errors.append(

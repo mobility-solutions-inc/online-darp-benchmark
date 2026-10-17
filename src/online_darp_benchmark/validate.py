@@ -130,7 +130,69 @@ def validate_manifest(
         raise ValidationFailure(f"{path} failed {kind} validation:\n{details}")
     if kind == "result":
         _validate_hidden_result_conflicts(document, resolved_schema_dir)
+        validate_result_semantics(path, document)
     return document
+
+
+def validate_result_semantics(path: Path, document: dict[str, Any]) -> None:
+    """Check result invariants that JSON Schema cannot express conveniently."""
+
+    stack = document["algorithm"]["optimization_stack"]
+    component_ids = [component["component_id"] for component in stack["components"]]
+    failures: list[str] = []
+    if len(component_ids) != len(set(component_ids)):
+        failures.append("optimization_stack component_id values must be unique")
+
+    uses_external_solver = any(
+        component["component_type"] == "solver" for component in stack["components"]
+    )
+    if document["run"]["run_status"] == "completed":
+        metrics = document["metrics"]
+        computation = metrics["computation"]
+        solver_fields = (
+            "external_solver_calls",
+            "external_solver_wall_time_seconds",
+            "external_solver_time_limit_hits",
+        )
+        for field in solver_fields:
+            if not uses_external_solver and computation[field] != 0:
+                failures.append(f"{field} must be zero when no external solver is disclosed")
+        unavailable = [field for field in solver_fields if computation[field] is None]
+        notes = metrics.get("notes")
+        if unavailable and not (isinstance(notes, str) and notes.strip()):
+            failures.append(
+                "metrics.notes must explain unavailable solver metrics: "
+                + ", ".join(unavailable)
+            )
+        calls = computation["external_solver_calls"]
+        wall_time = computation["external_solver_wall_time_seconds"]
+        limit_hits = computation["external_solver_time_limit_hits"]
+        if calls is not None and limit_hits is not None and limit_hits > calls:
+            failures.append(
+                "external_solver_time_limit_hits cannot exceed external_solver_calls"
+            )
+        if calls == 0 and ((wall_time or 0) > 0 or (limit_hits or 0) > 0):
+            failures.append(
+                "external solver wall time and time-limit hits must be zero "
+                "when external_solver_calls is zero"
+            )
+
+    certificate = document.get("offline_certificate")
+    if certificate is not None and not any(
+        component["component_type"] == "solver"
+        and component["role"] == "offline_reference"
+        and certificate["solver"] in (component["name"], component["component_id"])
+        and certificate["solver_version"] == component["version"]
+        for component in stack["components"]
+    ):
+        failures.append(
+            "offline_certificate solver and solver_version must match a disclosed "
+            "offline_reference solver component by name or component_id and version"
+        )
+
+    if failures:
+        details = "\n".join(failures)
+        raise ValidationFailure(f"{path} failed result validation:\n{details}")
 
 
 def validate_event_log(

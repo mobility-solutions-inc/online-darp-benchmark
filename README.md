@@ -58,6 +58,7 @@ Each completed run reports individual values rather than an aggregate rank:
 | Vehicle | total, occupied, and empty distance/time; utilization |
 | Stability | reassignments, promise changes, post-acceptance rejections |
 | Computation | decision latency, timeout count, wall time, memory |
+| Reproducibility | solver/engine, version, access terms, paid license, threads |
 | Feasibility | capacity, time-window, ride-time, and route violations |
 | Reproducibility | public-code availability/link, algorithm artifact, solver and environment disclosures |
 

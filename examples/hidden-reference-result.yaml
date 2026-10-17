@@ -1,4 +1,4 @@
-schema_version: 0.3.0
+schema_version: 0.4.0
 result_id: synthetic-hidden.reference.h0.seed7
 benchmark_version: 0.1.0
 instance_id: hidden.synthetic.001.case-a
@@ -31,6 +31,10 @@ algorithm:
   artifact_url: https://example.invalid/synthetic-hidden-reference
   artifact_digest: example-only
   internal_objective: Serve as many revealed requests as possible.
+  optimization_stack:
+    uses_external_components: false
+    components: []
+    notes: Optimization logic is included in the algorithm artifact.
   hard_and_soft_constraints: All benchmark feasibility constraints are hard.
   prediction_data_track: none
   uses_prediction: false

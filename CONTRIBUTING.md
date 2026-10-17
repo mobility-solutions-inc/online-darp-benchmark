@@ -114,9 +114,11 @@ results/<benchmark-version>/<algorithm>/<submission-id>/events.jsonl
 Include a schema-valid result manifest, complete event log, algorithm source or
 immutable artifact, reproducible invocation, license, and a disclosure of the
 algorithm authors/controllers/tuners/configurators, internal objective,
-prediction/training data, relocation policy, tuning, and hardware. Submit every
-required instance/lookahead/seed combination or explicitly
-list missing combinations with a run status and reason.
+prediction/training data, relocation policy, tuning, and hardware. Disclose every
+external solver or optimization component, including its exact version, role,
+access terms, paid-license use, obtainability, threads, and parameters. Submit
+every required instance/lookahead/seed combination or explicitly list missing
+combinations with a run status and reason.
 
 Every result must declare `code_available_publicly`. When it is `true`, provide
 `public_code_url` as a public link to the code that produced the result,

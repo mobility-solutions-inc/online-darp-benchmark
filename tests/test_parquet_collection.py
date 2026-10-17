@@ -888,3 +888,43 @@ def test_serviceability_counts_unavoidable_dropoff_wait(
     else:
         with pytest.raises(CollectionValidationError, match="within its shift and limits"):
             validate_collection(tmp_path)
+
+
+@pytest.mark.parametrize(("max_ride_time_ms", "valid"), [(120_000, True), (50_000, False)])
+def test_max_ride_includes_unavoidable_dropoff_wait(
+    tmp_path: Path, max_ride_time_ms: int, valid: bool
+) -> None:
+    # Pickup must happen by 0 s, but drop-off cannot start before 100 s.
+    _write_collection(
+        tmp_path,
+        request_overrides={
+            "latest_pickup_time_ms": 0,
+            "earliest_dropoff_time_ms": 100_000,
+            "max_ride_time_ms": max_ride_time_ms,
+        },
+    )
+    if valid:
+        assert validate_collection(tmp_path)["valid"] is True
+    else:
+        with pytest.raises(CollectionValidationError, match="shortest ride longer"):
+            validate_collection(tmp_path)
+
+
+def test_validator_checks_unreferenced_artifacts(tmp_path: Path) -> None:
+    _write_collection(tmp_path)
+    collection = yaml.safe_load((tmp_path / "collection.yaml").read_text())
+    requests = pq.read_table(tmp_path / "tables" / "requests.parquet").to_pylist()
+    requests[0]["party_size"] = 0
+    file_record = write_parquet(
+        tmp_path / "tables" / "orphan-requests.parquet",
+        requests,
+        schema_name="requests",
+        collection_id="test-collection",
+        artifact_id="test.orphan-requests",
+    )
+    collection["artifacts"]["test.orphan-requests"] = artifact_record(
+        role="requests", file_record=file_record, collection_root=tmp_path
+    )
+    dump_yaml(tmp_path / "collection.yaml", collection)
+    with pytest.raises(CollectionValidationError, match="test.orphan-requests: party_size"):
+        validate_collection(tmp_path)

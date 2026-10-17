@@ -451,7 +451,8 @@ def _write_travel_matrix(
     }:
         raise ValueError(f"GraphHopper server does not expose {GRAPHHOPPER_PROFILE!r}")
     # Existing shards are reused only when an interrupted run of the same
-    # converter version recorded the same routing inputs. The marker stays outside the published collection: convert()
+    # converter version recorded the same routing inputs and each shard's
+    # digest. The marker stays outside the published collection: convert()
     # removes it on success, so shard bytes and checksums are unchanged.
     routing_fingerprint = _routing_fingerprint(
         converter_version,

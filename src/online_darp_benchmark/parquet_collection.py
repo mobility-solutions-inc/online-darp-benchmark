@@ -780,6 +780,103 @@ def _artifact_table(
     return pa.concat_tables(tables)
 
 
+def _artifact_local_errors(
+    artifact_id: str, role: str, value: dict[str, list[Any]]
+) -> list[str]:
+    """Check one table's own keys and semantics, independent of any instance."""
+
+    errors: list[str] = []
+    keys = {
+        "requests": ("request_index", "request_id"),
+        "vehicles": ("vehicle_index", "vehicle_id"),
+        "nodes": ("node_index", "node_id"),
+        "onboard_requests": ("onboard_request_index", "onboard_request_id"),
+        "reveal_times": ("request_index", None),
+    }
+    if role in keys:
+        index_name, id_name = keys[role]
+        _check_contiguous(value[index_name], f"{artifact_id}: {index_name}", errors)
+        if id_name is not None and (
+            len(set(value[id_name])) != len(value[id_name])
+            or not all(_normal(item) for item in value[id_name])
+        ):
+            errors.append(f"{artifact_id}: invalid or duplicate {id_name}")
+
+    if role == "requests":
+        requests = value
+        if any(item < 1 for item in requests["party_size"]):
+            errors.append(f"{artifact_id}: party_size below one")
+        if any(item < 0 for item in requests["earliest_pickup_time_ms"]):
+            errors.append(f"{artifact_id}: negative earliest pickup time")
+        if any(
+            item < 0
+            for item in requests["pickup_service_time_ms"] + requests["dropoff_service_time_ms"]
+        ):
+            errors.append(f"{artifact_id}: negative service time")
+        if any(item is not None and item < 1 for item in requests["max_ride_time_ms"]):
+            errors.append(f"{artifact_id}: nonpositive maximum ride time")
+        for row in range(len(requests["request_index"])):
+            for lower_name, upper_name in (
+                ("earliest_pickup_time_ms", "latest_pickup_time_ms"),
+                ("earliest_dropoff_time_ms", "latest_dropoff_time_ms"),
+            ):
+                lower = requests[lower_name][row]
+                upper = requests[upper_name][row]
+                if lower is not None and upper is not None and lower > upper:
+                    errors.append(f"{artifact_id}: reversed request time window")
+    elif role == "vehicles":
+        vehicles = value
+        if any(item < 1 for item in vehicles["seat_capacity"]):
+            errors.append(f"{artifact_id}: vehicle capacity below one")
+        if any(item < 0 for item in vehicles["initial_load"]):
+            errors.append(f"{artifact_id}: negative initial load")
+        if any(
+            load > capacity
+            for load, capacity in zip(
+                vehicles["initial_load"], vehicles["seat_capacity"], strict=True
+            )
+        ):
+            errors.append(f"{artifact_id}: initial load exceeds vehicle capacity")
+        if any(
+            end < start
+            for start, end in zip(
+                vehicles["shift_start_time_ms"], vehicles["shift_end_time_ms"], strict=True
+            )
+        ):
+            errors.append(f"{artifact_id}: reversed vehicle shift")
+        if any(
+            duration is not None and duration < 1
+            for duration in vehicles["max_route_duration_ms"]
+        ):
+            errors.append(f"{artifact_id}: nonpositive maximum route duration")
+    elif role == "onboard_requests":
+        onboard = value
+        if any(item < 1 for item in onboard["party_size"]):
+            errors.append(f"{artifact_id}: party_size below one")
+        if any(item < 1 for item in onboard["dropoff_route_position"]):
+            errors.append(f"{artifact_id}: route position below one")
+        if any(item < 0 for item in onboard["dropoff_service_time_ms"]):
+            errors.append(f"{artifact_id}: negative service time")
+        if any(
+            not earliest <= pickup <= departure
+            for earliest, pickup, departure in zip(
+                onboard["earliest_pickup_time_ms"],
+                onboard["pickup_time_ms"],
+                onboard["pickup_departure_time_ms"],
+                strict=True,
+            )
+        ):
+            errors.append(f"{artifact_id}: impossible onboard pickup chronology")
+        if any(item is not None and item < 1 for item in onboard["max_ride_time_ms"]):
+            errors.append(f"{artifact_id}: nonpositive maximum ride time")
+    elif role == "travel_times":
+        if any(item < 0 for item in value["travel_time_ms"]):
+            errors.append(f"{artifact_id}: negative travel time")
+        if any(item is not None and item < 0 for item in value["distance_mm"]):
+            errors.append(f"{artifact_id}: negative travel distance")
+    return errors
+
+
 def _seat_release_lower_bound(
     remaining: pa.Table,
     to_pickup: pa.ChunkedArray,
@@ -1002,7 +1099,11 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
         artifact_id: table.to_pydict() if table is not None else None
         for artifact_id, table in cache.items()
     }
-    checked_artifacts: set[str] = set()
+    for artifact_id, value in dictionaries.items():
+        if value is not None:
+            role = collection["artifacts"][artifact_id]["role"]
+            errors.extend(_artifact_local_errors(artifact_id, role, value))
+
     checked_relationships: set[tuple[str, ...]] = set()
     physical_fingerprints: dict[Any, str] = {}
     instance_ids: set[Any] = set()
@@ -1059,58 +1160,8 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
         if requests["request_index"] and not vehicles["vehicle_index"]:
             errors.append(f"{relative_manifest}: requests have no vehicles to serve them")
 
-        for role, index_name, id_name in (
-            ("requests", "request_index", "request_id"),
-            ("vehicles", "vehicle_index", "vehicle_id"),
-            ("nodes", "node_index", "node_id"),
-        ):
-            artifact_id = components[role]
-            if artifact_id in checked_artifacts:
-                continue
-            value = values[role]
-            _check_contiguous(value[index_name], f"{artifact_id}: {index_name}", errors)
-            if len(set(value[id_name])) != len(value[id_name]) or not all(
-                _normal(item) for item in value[id_name]
-            ):
-                errors.append(f"{artifact_id}: invalid or duplicate {id_name}")
-            checked_artifacts.add(artifact_id)
-
         request_id = components["requests"]
-        if request_id not in checked_artifacts:
-            checked_artifacts.add(request_id)
-        request_semantics_key = ("request-semantics", request_id)
-        if request_semantics_key not in checked_relationships:
-            checked_relationships.add(request_semantics_key)
-            if any(value < 1 for value in requests["party_size"]):
-                errors.append(f"{request_id}: party_size below one")
-            if any(value < 0 for value in requests["earliest_pickup_time_ms"]):
-                errors.append(f"{request_id}: negative earliest pickup time")
-            if any(
-                value < 0
-                for value in requests["pickup_service_time_ms"]
-                + requests["dropoff_service_time_ms"]
-            ):
-                errors.append(f"{request_id}: negative service time")
-            if any(
-                value is not None and value < 1 for value in requests["max_ride_time_ms"]
-            ):
-                errors.append(f"{request_id}: nonpositive maximum ride time")
-            for row in range(len(requests["request_index"])):
-                for lower_name, upper_name in (
-                    ("earliest_pickup_time_ms", "latest_pickup_time_ms"),
-                    ("earliest_dropoff_time_ms", "latest_dropoff_time_ms"),
-                ):
-                    lower = requests[lower_name][row]
-                    upper = requests[upper_name][row]
-                    if lower is not None and upper is not None and lower > upper:
-                        errors.append(f"{request_id}: reversed request time window")
-
         reveal_id = components["reveal_times"]
-        if reveal_id not in checked_artifacts:
-            _check_contiguous(
-                reveals["request_index"], f"{reveal_id}: request_index", errors
-            )
-            checked_artifacts.add(reveal_id)
         demand_reveal_key = ("demand-reveal", request_id, reveal_id)
         if demand_reveal_key not in checked_relationships:
             checked_relationships.add(demand_reveal_key)
@@ -1124,34 +1175,6 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
                         )
 
         fleet_id = components["vehicles"]
-        fleet_semantics_key = ("fleet-semantics", fleet_id)
-        if fleet_semantics_key not in checked_relationships:
-            checked_relationships.add(fleet_semantics_key)
-            if any(value < 1 for value in vehicles["seat_capacity"]):
-                errors.append(f"{fleet_id}: vehicle capacity below one")
-            if any(value < 0 for value in vehicles["initial_load"]):
-                errors.append(f"{fleet_id}: negative initial load")
-            if any(
-                load > capacity
-                for load, capacity in zip(
-                    vehicles["initial_load"], vehicles["seat_capacity"], strict=True
-                )
-            ):
-                errors.append(f"{fleet_id}: initial load exceeds vehicle capacity")
-            if any(
-                end < start
-                for start, end in zip(
-                    vehicles["shift_start_time_ms"],
-                    vehicles["shift_end_time_ms"],
-                    strict=True,
-                )
-            ):
-                errors.append(f"{fleet_id}: reversed vehicle shift")
-            if any(
-                duration is not None and duration < 1
-                for duration in vehicles["max_route_duration_ms"]
-            ):
-                errors.append(f"{fleet_id}: nonpositive maximum route duration")
 
         shift_key = ("request-shifts", request_id, fleet_id, components["travel_times"])
         referenced_nodes = pa.chunked_array(
@@ -1220,10 +1243,6 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
                     if travel["travel_time_ms"][index * node_count + index] != 0:
                         errors.append(f"{relative_manifest}: nonzero travel matrix diagonal")
                         break
-            if any(value < 0 for value in travel["travel_time_ms"]):
-                errors.append(f"{relative_manifest}: negative travel time")
-            if any(value is not None and value < 0 for value in travel["distance_mm"]):
-                errors.append(f"{relative_manifest}: negative travel distance")
 
         feasibility_key = ("request-feasibility", request_id, components["travel_times"])
         if (
@@ -1248,7 +1267,19 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
                 if latest_dropoff is not None and earliest_arrival > latest_dropoff:
                     window_rows.append(row)
                 max_ride = requests["max_ride_time_ms"][row]
-                if max_ride is not None and direct > max_ride:
+                # The ride lasts at least the direct trip, and at least until the
+                # earliest drop-off when pickup must end by the latest pickup.
+                shortest_ride = direct
+                latest_pickup = requests["latest_pickup_time_ms"][row]
+                earliest_dropoff = requests["earliest_dropoff_time_ms"][row]
+                if latest_pickup is not None and earliest_dropoff is not None:
+                    shortest_ride = max(
+                        direct,
+                        earliest_dropoff
+                        - latest_pickup
+                        - requests["pickup_service_time_ms"][row],
+                    )
+                if max_ride is not None and shortest_ride > max_ride:
                     ride_rows.append(row)
             if window_rows:
                 errors.append(
@@ -1257,8 +1288,8 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
                 )
             if ride_rows:
                 errors.append(
-                    f"{relative_manifest}: {len(ride_rows)} request(s) have direct travel "
-                    f"longer than max_ride_time_ms, first row {ride_rows[0]}"
+                    f"{relative_manifest}: {len(ride_rows)} request(s) have a shortest "
+                    f"ride longer than max_ride_time_ms, first row {ride_rows[0]}"
                 )
 
         request_nodes_key = ("request-nodes", request_id, components["nodes"])
@@ -1281,17 +1312,6 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
         if "onboard_requests" in components:
             onboard_id = components["onboard_requests"]
             onboard = values["onboard_requests"]
-            if onboard_id not in checked_artifacts:
-                _check_contiguous(
-                    onboard["onboard_request_index"],
-                    f"{onboard_id}: onboard_request_index",
-                    errors,
-                )
-                if len(set(onboard["onboard_request_id"])) != len(
-                    onboard["onboard_request_id"]
-                ) or not all(_normal(value) for value in onboard["onboard_request_id"]):
-                    errors.append(f"{onboard_id}: invalid or duplicate onboard_request_id")
-                checked_artifacts.add(onboard_id)
             onboard_key = (
                 "onboard-state",
                 onboard_id,
@@ -1300,26 +1320,6 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
             )
             if onboard_key not in checked_relationships:
                 checked_relationships.add(onboard_key)
-                if any(value < 1 for value in onboard["party_size"]):
-                    errors.append(f"{onboard_id}: party_size below one")
-                if any(value < 1 for value in onboard["dropoff_route_position"]):
-                    errors.append(f"{onboard_id}: route position below one")
-                if any(value < 0 for value in onboard["dropoff_service_time_ms"]):
-                    errors.append(f"{onboard_id}: negative service time")
-                if any(
-                    not earliest <= pickup <= departure
-                    for earliest, pickup, departure in zip(
-                        onboard["earliest_pickup_time_ms"],
-                        onboard["pickup_time_ms"],
-                        onboard["pickup_departure_time_ms"],
-                        strict=True,
-                    )
-                ):
-                    errors.append(f"{onboard_id}: impossible onboard pickup chronology")
-                if any(
-                    value is not None and value < 1 for value in onboard["max_ride_time_ms"]
-                ):
-                    errors.append(f"{onboard_id}: nonpositive maximum ride time")
                 if any(
                     value < 0 or value >= node_count
                     for value in onboard["pickup_node_index"] + onboard["dropoff_node_index"]

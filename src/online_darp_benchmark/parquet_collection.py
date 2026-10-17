@@ -538,12 +538,12 @@ def _download_uri(uri: str, directory: Path) -> Path:
 
 def _uri_error(uri: str) -> str | None:
     parts = urlsplit(uri)
-    if parts.scheme != "https" or not parts.netloc:
+    if parts.scheme != "https" or not parts.hostname:
         return "artifact uri must be an absolute https URL"
     segments = parts.path.split("/")
     if "latest" in (segment.lower() for segment in segments):
         return "artifact uri must not be an unversioned latest URL"
-    host = parts.netloc.lower()
+    host = (parts.hostname or "").lower()
     ref = None
     if host == "raw.githubusercontent.com" and len(segments) > 3:
         ref = segments[3]
@@ -648,6 +648,8 @@ def _manifest_errors(collection: Any) -> list[str]:
                     errors.append(f"collection.yaml transformations[{index}] missing {key}")
     if not isinstance(collection.get("instances"), list) or not collection["instances"]:
         errors.append("collection.yaml missing instances")
+    elif not all(isinstance(entry, str) and entry for entry in collection["instances"]):
+        errors.append("collection.yaml instances must be nonempty path strings")
     artifacts = collection.get("artifacts")
     if not isinstance(artifacts, Mapping) or not artifacts:
         errors.append("collection.yaml missing artifacts")
@@ -892,20 +894,33 @@ def _seat_release_lower_bound(
     node_count: int,
     start_node: int,
     free_seats: int,
-    drops: Sequence[tuple[int, int, int]],
+    drops: Sequence[tuple[int, int, int, int]],
+    departure: int,
 ) -> pa.ChunkedArray:
-    """Lower-bound the time to reach each pickup after freeing enough seats."""
+    """Lower-bound the time after *departure* to reach each pickup with enough seats.
 
-    first_leg = min(times[start_node * node_count + node].as_py() for node, _, _ in drops)
+    A rider cannot be dropped before their pickup departure, so each detour
+    first waits for the rider it releases (or the earliest onboard departure
+    when several parties must be released).
+    """
+
+    def wait_for(rider_departure: int) -> int:
+        return max(0, rider_departure - departure)
+
+    first_leg = min(times[start_node * node_count + node].as_py() for node, *_ in drops)
     last_leg = None
     single_detour = None
-    for node, service, _ in drops:
+    for node, service, _, rider_departure in drops:
         from_drop = pc.take(times, pc.add(remaining["pickup"], node * node_count))
         last_leg = from_drop if last_leg is None else pc.min_element_wise(last_leg, from_drop)
-        via = pc.add(from_drop, times[start_node * node_count + node].as_py() + service)
+        via = pc.add(
+            from_drop,
+            wait_for(rider_departure) + times[start_node * node_count + node].as_py() + service,
+        )
         single_detour = via if single_detour is None else pc.min_element_wise(single_detour, via)
-    largest_parties = sorted((party for _, _, party in drops), reverse=True)
-    smallest_services = sorted(service for _, service, _ in drops)
+    first_leg += wait_for(min(rider_departure for *_, rider_departure in drops))
+    largest_parties = sorted((party for _, _, party, _ in drops), reverse=True)
+    smallest_services = sorted(service for _, service, _, _ in drops)
     released = [sum(largest_parties[:count]) for count in range(1, len(drops) + 1)]
     shortage = pc.subtract(remaining["party_size"], free_seats)
     # Requests needing more seats than all onboard parties hold fail on capacity
@@ -964,16 +979,17 @@ def _requests_outside_fleet_shifts(
             "dropoff_service": requests["dropoff_service_time_ms"],
         }
     )
-    onboard_dropoffs: dict[int, list[tuple[int, int, int]]] = {}
+    onboard_dropoffs: dict[int, list[tuple[int, int, int, int]]] = {}
     if onboard is not None:
-        for vehicle, node, service, party in zip(
+        for vehicle, node, service, party, departure in zip(
             onboard["assigned_vehicle_index"].to_pylist(),
             onboard["dropoff_node_index"].to_pylist(),
             onboard["dropoff_service_time_ms"].to_pylist(),
             onboard["party_size"].to_pylist(),
+            onboard["pickup_departure_time_ms"].to_pylist(),
             strict=True,
         ):
-            onboard_dropoffs.setdefault(vehicle, []).append((node, service, party))
+            onboard_dropoffs.setdefault(vehicle, []).append((node, service, party, departure))
     vehicle_groups = set()
     for vehicle, row in enumerate(
         zip(
@@ -1003,13 +1019,20 @@ def _requests_outside_fleet_shifts(
         if remaining.num_rows == 0:
             break
         capacity, load, start_node, end_node, shift_start, shift_end, max_duration, drops = group
+        # The start node is the vehicle's location at simulation time zero.
+        departure = max(shift_start, 0)
         to_pickup = pc.take(times, pc.add(remaining["pickup"], start_node * node_count))
         if load and drops:
             to_pickup = _seat_release_lower_bound(
-                remaining, to_pickup, times, node_count, start_node, capacity - load, drops
+                remaining,
+                to_pickup,
+                times,
+                node_count,
+                start_node,
+                capacity - load,
+                drops,
+                departure,
             )
-        # The start node is the vehicle's location at simulation time zero.
-        departure = max(shift_start, 0)
         arrival = pc.max_element_wise(pc.add(to_pickup, departure), remaining["earliest"])
         dropoff_arrival = pc.add(arrival, remaining["pickup_and_ride"])
         finish = pc.add(

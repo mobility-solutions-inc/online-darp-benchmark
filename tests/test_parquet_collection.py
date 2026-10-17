@@ -594,6 +594,8 @@ def test_validator_rejects_impossible_onboard_chronology(
         ("https://raw.githubusercontent.com/org/repo/main/table.parquet", False),
         ("https://github.com/org/repo/raw/v1.0/table.parquet", False),
         ("https://gitlab.com/org/repo/-/raw/main/table.parquet", False),
+        ("https://raw.githubusercontent.com:443/org/repo/main/table.parquet", False),
+        ("https://user@github.com/org/repo/blob/main/table.parquet", False),
         (f"https://raw.githubusercontent.com/org/repo/{'a' * 40}/table.parquet", True),
         ("https://github.com/org/repo/releases/download/v1.0/table.parquet", True),
     ],
@@ -1058,4 +1060,33 @@ def test_serviceability_is_checked_per_onboard_state(tmp_path: Path) -> None:
     dump_yaml(tmp_path / "collection.yaml", collection)
 
     with pytest.raises(CollectionValidationError, match="test-blocked.yaml: 1 request"):
+        validate_collection(tmp_path)
+
+
+def test_seat_release_waits_for_onboard_departure(tmp_path: Path) -> None:
+    # Releasing the full party takes 60 s of driving, but the rider leaves at 100 s.
+    _write_collection(
+        tmp_path,
+        vehicle_overrides={"initial_load": 4},
+        request_overrides={"party_size": 4, "latest_pickup_time_ms": 75_000},
+        onboard_requests=[
+            _onboard_request(
+                party_size=4,
+                earliest_pickup_time_ms=100_000,
+                pickup_time_ms=100_000,
+                pickup_departure_time_ms=100_000,
+            )
+        ],
+    )
+    with pytest.raises(CollectionValidationError, match="within its shift and limits"):
+        validate_collection(tmp_path)
+
+
+@pytest.mark.parametrize("entry", [None, "", 3])
+def test_validator_requires_instance_path_strings(tmp_path: Path, entry: object) -> None:
+    _write_collection(tmp_path)
+    collection = yaml.safe_load((tmp_path / "collection.yaml").read_text())
+    collection["instances"].append(entry)
+    dump_yaml(tmp_path / "collection.yaml", collection)
+    with pytest.raises(CollectionValidationError, match="nonempty path strings"):
         validate_collection(tmp_path)

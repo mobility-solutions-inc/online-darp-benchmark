@@ -442,7 +442,7 @@ def _check_contiguous(values: list[int], label: str, errors: list[str]) -> None:
 def _package_path(root: Path, relative_path: str) -> Path | None:
     """Resolve a manifest path, or return None if it escapes the package root."""
 
-    if Path(relative_path).is_absolute():
+    if Path(relative_path).is_absolute() or ".." in Path(relative_path).parts:
         return None
     path = (root / relative_path).resolve()
     return path if path.is_relative_to(root.resolve()) else None
@@ -1074,7 +1074,11 @@ def _requests_outside_fleet_shifts(
             ),
         )
         if max_duration is not None:
-            served = pc.and_(served, pc.less_equal(driving, max_duration))
+            # A warm-start route has already run since its earliest onboard departure.
+            elapsed_before_start = max(0, -min((drop[3] for drop in drops), default=0))
+            served = pc.and_(
+                served, pc.less_equal(pc.add(driving, elapsed_before_start), max_duration)
+            )
         remaining = remaining.filter(pc.invert(served))
     return remaining.num_rows
 
@@ -1448,6 +1452,46 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
                     errors.append(
                         f"{onboard_id}: {unreachable} onboard rider(s) cannot be dropped "
                         "off within the assigned vehicle's shift and route duration"
+                    )
+                # dropoff_route_position records the source route, not a required
+                # order, so bound visiting all of a vehicle's drop-offs in any order:
+                # the cheapest first leg, every service, and the cheapest leg home.
+                riders_by_vehicle: dict[int, list[int]] = {}
+                for row in onboard_rows:
+                    riders_by_vehicle.setdefault(
+                        onboard["assigned_vehicle_index"][row], []
+                    ).append(row)
+                overloaded = 0
+                for vehicle, rows in riders_by_vehicle.items():
+                    if len(rows) < 2:
+                        continue
+                    start_node = vehicles["start_node_index"][vehicle]
+                    work = min(
+                        travel["travel_time_ms"][
+                            start_node * node_count + onboard["dropoff_node_index"][row]
+                        ]
+                        for row in rows
+                    ) + sum(onboard["dropoff_service_time_ms"][row] for row in rows)
+                    end_node = vehicles["end_node_index"][vehicle]
+                    if end_node is not None:
+                        work += min(
+                            travel["travel_time_ms"][
+                                onboard["dropoff_node_index"][row] * node_count + end_node
+                            ]
+                            for row in rows
+                        )
+                    departures = [onboard["pickup_departure_time_ms"][row] for row in rows]
+                    departure = max(0, vehicles["shift_start_time_ms"][vehicle], min(departures))
+                    max_duration = vehicles["max_route_duration_ms"][vehicle]
+                    if departure + work > vehicles["shift_end_time_ms"][vehicle] or (
+                        max_duration is not None
+                        and departure + work - min(0, min(departures)) > max_duration
+                    ):
+                        overloaded += 1
+                if overloaded:
+                    errors.append(
+                        f"{onboard_id}: {overloaded} vehicle(s) cannot drop off all onboard "
+                        "riders within the shift and route duration"
                     )
         elif any(vehicles["initial_load"]):
             errors.append(f"{relative_manifest}: fleet has load but no onboard_requests component")

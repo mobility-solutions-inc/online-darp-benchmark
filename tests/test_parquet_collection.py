@@ -1090,3 +1090,52 @@ def test_validator_requires_instance_path_strings(tmp_path: Path, entry: object)
     dump_yaml(tmp_path / "collection.yaml", collection)
     with pytest.raises(CollectionValidationError, match="nonempty path strings"):
         validate_collection(tmp_path)
+
+
+def test_validator_rejects_parent_directory_segments(tmp_path: Path) -> None:
+    _write_collection(tmp_path)
+    collection = yaml.safe_load((tmp_path / "collection.yaml").read_text())
+    collection["artifacts"]["test.requests"]["files"][0]["path"] = (
+        "tables/sub/../requests.parquet"
+    )
+    dump_yaml(tmp_path / "collection.yaml", collection)
+    with pytest.raises(CollectionValidationError, match="escapes collection root"):
+        validate_collection(tmp_path)
+
+
+def test_new_requests_count_elapsed_warm_start_route_time(tmp_path: Path) -> None:
+    # The route has run 100 s; the request needs 60 s more against a 120 s limit.
+    _write_collection(
+        tmp_path,
+        vehicle_overrides={"initial_load": 1, "max_route_duration_ms": 120_000},
+        request_overrides={"max_ride_time_ms": None},
+        onboard_requests=[
+            _onboard_request(
+                dropoff_node_index=0,
+                earliest_pickup_time_ms=-100_000,
+                pickup_time_ms=-100_000,
+                pickup_departure_time_ms=-100_000,
+            )
+        ],
+    )
+    with pytest.raises(CollectionValidationError, match="within its shift and limits"):
+        validate_collection(tmp_path)
+
+
+def test_validator_bounds_all_onboard_dropoffs_per_vehicle(tmp_path: Path) -> None:
+    # Each rider alone needs 70 s of a 75 s shift; both together need at least 80 s.
+    _write_collection(
+        tmp_path,
+        vehicle_overrides={"initial_load": 2, "shift_end_time_ms": 75_000},
+        onboard_requests=[
+            _onboard_request(
+                onboard_request_index=index,
+                onboard_request_id=f"onboard-{index}",
+                dropoff_service_time_ms=10_000,
+                dropoff_route_position=index + 1,
+            )
+            for index in range(2)
+        ],
+    )
+    with pytest.raises(CollectionValidationError, match="cannot drop off all onboard riders"):
+        validate_collection(tmp_path)

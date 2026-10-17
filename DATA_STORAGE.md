@@ -48,12 +48,15 @@ history small.
 Generated collections are written outside the repository by default:
 
 ```bash
-odb-convert-eccel /path/to/instances-DDARP-DPDPTW /data/eccel-ddarp-v1.2
+CONVERTER_VERSION="$(git rev-parse HEAD)"  # immutable commit that produced the data
+odb-convert-eccel /path/to/instances-DDARP-DPDPTW /data/eccel-ddarp-v1.2 \
+  --converter-version "$CONVERTER_VERSION"
 odb-fetch-nyc /data/nyc-source
-odb-convert-nyc /data/nyc-source/NYC_Dataset_2015-2016 /data/nyc-darp-v1.0
+odb-convert-nyc /data/nyc-source/NYC_Dataset_2015-2016 /data/nyc-darp-v1.0 \
+  --converter-version "$CONVERTER_VERSION"
 odb-convert-ontra-manhattan \
   /data/ontra-manhattan-source /data/ontra-manhattan-tlc-2025-01-22-v1 \
-  --converter-version 9f28842d0a87e88d0b33da061e26a7911eccc342 \
+  --converter-version "$CONVERTER_VERSION" \
   --graphhopper-url http://localhost:8991 \
   --osm-pbf-sha256 6769faafd0f994abc45d2b7fe3a3f86520d41b33f0d9ee0350b95d800976e245 \
   --graphhopper-build sha256:acff212715b0fc13b970da5837d51414e7ed1f9464b6cc35c0c3eb2dcb4228b1 \

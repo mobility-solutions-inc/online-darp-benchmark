@@ -25,6 +25,7 @@ from .parquet_collection import (
     artifact_record,
     dump_yaml,
     physical_problem_sha256,
+    require_converter_version,
     sha256_file,
     write_parquet,
 )
@@ -684,6 +685,7 @@ def convert(
 ) -> dict[str, Any]:
     if (output / "collection.yaml").exists():
         raise FileExistsError(f"refusing to replace existing collection: {output}")
+    require_converter_version(converter_version)
     if matrix_shard_origins < 1:
         raise ValueError("matrix_shard_origins must be at least one")
     if graphhopper_concurrency < 1:
@@ -994,7 +996,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("output", type=Path, help="new normalized collection directory")
     parser.add_argument(
         "--converter-version",
-        default="unreleased",
+        required=True,
         help="immutable converter commit or release identifier",
     )
     parser.add_argument(

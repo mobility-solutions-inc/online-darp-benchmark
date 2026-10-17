@@ -56,3 +56,17 @@ def test_converter_requires_source_license(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError, match="license is required"):
         convert(source, output, "test-version", enforce_pins=False)
     assert not output.exists()
+
+
+@pytest.mark.parametrize("version", ["", "unreleased"])
+def test_converter_requires_immutable_version(tmp_path: Path, version: str) -> None:
+    with pytest.raises(ValueError, match="immutable commit or release"):
+        convert(tmp_path / "source", tmp_path / "collection", version)
+    assert not (tmp_path / "collection").exists()
+
+
+def test_cli_requires_converter_version(tmp_path: Path) -> None:
+    from online_darp_benchmark.convert_eccel import main
+
+    with pytest.raises(SystemExit):
+        main([str(tmp_path / "source"), str(tmp_path / "collection")])

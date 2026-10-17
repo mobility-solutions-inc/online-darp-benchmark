@@ -15,6 +15,7 @@ from .parquet_collection import (
     artifact_record,
     canonical_sha256,
     dump_yaml,
+    require_converter_version,
     physical_problem_sha256,
     sha256_file,
     write_parquet,
@@ -298,6 +299,7 @@ def convert(
 
     if (output / "collection.yaml").exists():
         raise FileExistsError(f"refusing to replace existing collection: {output}")
+    require_converter_version(converter_version)
     artifacts: dict[str, Any] = {}
     instance_paths: list[str] = []
     source_checksums: list[tuple[str, str]] = []
@@ -489,7 +491,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("output", type=Path, help="new normalized collection directory")
     parser.add_argument(
         "--converter-version",
-        default="unreleased",
+        required=True,
         help="immutable converter commit or release identifier",
     )
     return parser

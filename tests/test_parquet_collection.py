@@ -788,3 +788,46 @@ def test_validator_applies_route_duration_to_onboard_riders(tmp_path: Path) -> N
     )
     with pytest.raises(CollectionValidationError, match="shift and route duration"):
         validate_collection(tmp_path)
+
+
+def test_validator_rejects_duplicate_instance_ids(tmp_path: Path) -> None:
+    _write_collection(tmp_path)
+    collection = yaml.safe_load((tmp_path / "collection.yaml").read_text())
+    (tmp_path / "instances/copy.yaml").write_text((tmp_path / "instances/test.yaml").read_text())
+    collection["instances"].append("instances/copy.yaml")
+    dump_yaml(tmp_path / "collection.yaml", collection)
+    with pytest.raises(CollectionValidationError, match="duplicate instance_id"):
+        validate_collection(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("vehicle_overrides", "request_overrides"),
+    [
+        ({"start_node_index": 1}, {"latest_dropoff_time_ms": 50_000}),
+        ({"initial_load": 4}, {"latest_pickup_time_ms": 0}),
+    ],
+)
+def test_serviceability_includes_dropoff_windows_and_onboard_seats(
+    tmp_path: Path, vehicle_overrides: dict[str, int], request_overrides: dict[str, int]
+) -> None:
+    onboard = (
+        [_onboard_request(party_size=4)] if vehicle_overrides.get("initial_load") else None
+    )
+    _write_collection(
+        tmp_path,
+        vehicle_overrides=vehicle_overrides,
+        request_overrides=request_overrides,
+        onboard_requests=onboard,
+    )
+    with pytest.raises(CollectionValidationError, match="within its shift and limits"):
+        validate_collection(tmp_path)
+
+
+def test_serviceability_allows_free_seats_with_onboard_riders(tmp_path: Path) -> None:
+    _write_collection(
+        tmp_path,
+        vehicle_overrides={"initial_load": 3},
+        request_overrides={"latest_pickup_time_ms": 0},
+        onboard_requests=[_onboard_request(party_size=3)],
+    )
+    assert validate_collection(tmp_path)["valid"] is True

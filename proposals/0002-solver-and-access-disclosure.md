@@ -168,6 +168,28 @@ The result schema enforces:
 - an offline certificate names a disclosed `solver` component with role
   `offline_reference`, by `name` or `component_id`, with the same version.
 
+## Alternatives considered
+
+- **Restrict official results to open-source or no-cost solvers.** This would
+  simplify reproduction but exclude commercial and private engines that are
+  common in practice and often define the state of the art. The benchmark instead
+  admits every stack and makes its access requirements visible.
+- **Free-text solver notes only.** Prose is easy to submit but cannot be filtered,
+  validated, or displayed consistently, and it does not distinguish "no external
+  solver" from missing disclosure.
+- **A maintained product-to-access-class registry.** Classifying products such as
+  Gurobi or OR-Tools once would reduce submitter effort, but editions, versions,
+  and license terms change. Each result instead records the license actually used
+  for its run, with `license_name` and `license_url` as the source of truth.
+- **A single per-result access label or "openness" score.** One label cannot
+  describe a stack whose modeling layer, MIP backend, and routing engine have
+  different terms, and a composite score would conflict with the policy against
+  project-defined aggregates. Components are therefore listed individually.
+- **Folding paid-license use and obtainability into the access class.** These are
+  separate facts: a no-cost academic license may not be publicly obtainable, and
+  a paid support license may be used with an open-source component. They are
+  recorded as independent fields.
+
 ## Compatibility and adoption
 
 This changes the result schema from `0.3.0` to `0.4.0`. There are no official

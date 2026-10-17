@@ -9,3 +9,9 @@ dist/
 *.egg-info/
 .DS_Store
 
+# Complete collections are immutable external data releases, never Git/LFS data.
+/collections/
+/data/
+*.parquet
+*.tar.gz
+!tests/fixtures/**/*.parquet

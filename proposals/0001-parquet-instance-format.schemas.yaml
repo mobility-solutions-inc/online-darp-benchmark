@@ -1,0 +1,129 @@
+proposal: RFC-0001
+format_version: 1.0.0-draft.1
+metadata_prefix: online_darp.
+common:
+  column_name_pattern: ^[a-z][a-z0-9_]*$
+  extension_column_pattern: ^x_[a-z0-9]+__[a-z][a-z0-9_]*$
+  string_normalization: NFC
+  time_unit: millisecond
+  distance_unit: millimeter
+  forbidden_float_values:
+    - nan
+    - positive_infinity
+    - negative_infinity
+tables:
+  requests:
+    schema_version: 1.0.0-draft.1
+    primary_key:
+      - request_index
+    sort_keys:
+      - request_index
+    fields:
+      - {name: request_index, type: int32, nullable: false, constraints: [contiguous_zero_based]}
+      - {name: request_id, type: string, nullable: false, constraints: [unique, nonempty, nfc]}
+      - {name: source_request_id, type: string, nullable: true}
+      - {name: party_size, type: int32, nullable: false, minimum: 1}
+      - {name: pickup_node_index, type: int32, nullable: false, foreign_key: nodes.node_index}
+      - {name: dropoff_node_index, type: int32, nullable: false, foreign_key: nodes.node_index}
+      - {name: earliest_pickup_time_ms, type: int64, nullable: false, minimum: 0}
+      - {name: latest_pickup_time_ms, type: int64, nullable: true}
+      - {name: earliest_dropoff_time_ms, type: int64, nullable: true}
+      - {name: latest_dropoff_time_ms, type: int64, nullable: true}
+      - {name: max_ride_time_ms, type: int64, nullable: true, exclusive_minimum: 0}
+      - {name: pickup_service_time_ms, type: int64, nullable: false, minimum: 0}
+      - {name: dropoff_service_time_ms, type: int64, nullable: false, minimum: 0}
+  reveal_times:
+    schema_version: 1.0.0-draft.1
+    primary_key:
+      - request_index
+    sort_keys:
+      - request_index
+    row_relationship: exactly_one_per_requests_row
+    fields:
+      - {name: request_index, type: int32, nullable: false, foreign_key: requests.request_index}
+      - {name: base_reveal_time_ms, type: int64, nullable: false}
+  vehicles:
+    schema_version: 1.0.0-draft.1
+    primary_key:
+      - vehicle_index
+    sort_keys:
+      - vehicle_index
+    fields:
+      - {name: vehicle_index, type: int32, nullable: false, constraints: [contiguous_zero_based]}
+      - {name: vehicle_id, type: string, nullable: false, constraints: [unique, nonempty, nfc]}
+      - {name: source_vehicle_id, type: string, nullable: true}
+      - {name: start_node_index, type: int32, nullable: false, foreign_key: nodes.node_index}
+      - {name: end_node_index, type: int32, nullable: true, foreign_key: nodes.node_index}
+      - {name: shift_start_time_ms, type: int64, nullable: false}
+      - {name: shift_end_time_ms, type: int64, nullable: false}
+      - {name: max_route_duration_ms, type: int64, nullable: true, exclusive_minimum: 0}
+      - {name: seat_capacity, type: int32, nullable: false, minimum: 1}
+      - {name: initial_load, type: int32, nullable: false, minimum: 0}
+  onboard_requests:
+    schema_version: 1.0.0-draft.1
+    primary_key:
+      - onboard_request_index
+    sort_keys:
+      - onboard_request_index
+    optional_component: true
+    fields:
+      - {name: onboard_request_index, type: int32, nullable: false, constraints: [contiguous_zero_based]}
+      - {name: onboard_request_id, type: string, nullable: false, constraints: [unique, nonempty, nfc]}
+      - {name: source_request_id, type: string, nullable: true}
+      - {name: party_size, type: int32, nullable: false, minimum: 1}
+      - {name: pickup_node_index, type: int32, nullable: false, foreign_key: nodes.node_index}
+      - {name: dropoff_node_index, type: int32, nullable: false, foreign_key: nodes.node_index}
+      - {name: earliest_pickup_time_ms, type: int64, nullable: false}
+      - {name: pickup_time_ms, type: int64, nullable: false}
+      - {name: pickup_departure_time_ms, type: int64, nullable: false}
+      - {name: assigned_vehicle_index, type: int32, nullable: false, foreign_key: vehicles.vehicle_index}
+      - {name: dropoff_route_position, type: int32, nullable: false, minimum: 1}
+      - {name: max_ride_time_ms, type: int64, nullable: true, exclusive_minimum: 0}
+      - {name: dropoff_service_time_ms, type: int64, nullable: false, minimum: 0}
+  nodes:
+    schema_version: 1.0.0-draft.1
+    primary_key:
+      - node_index
+    sort_keys:
+      - node_index
+    fields:
+      - {name: node_index, type: int32, nullable: false, constraints: [contiguous_zero_based]}
+      - {name: node_id, type: string, nullable: false, constraints: [unique, nonempty, nfc]}
+      - {name: source_node_id, type: string, nullable: true}
+      - {name: relocation_allowed, type: bool, nullable: false}
+    spatial_profiles:
+      matrix_only: []
+      abstract_cartesian:
+        - {name: x, type: float64, nullable: false, constraints: [finite]}
+        - {name: y, type: float64, nullable: false, constraints: [finite]}
+      geographic:
+        geoparquet_version: 1.1.0
+        geometry_encoding: WKB
+        geometry_types: [Point]
+        fields:
+          - {name: geometry, type: binary, nullable: false}
+  travel_times:
+    schema_version: 1.0.0-draft.1
+    primary_key:
+      - from_node_index
+      - to_node_index
+    sort_keys:
+      - from_node_index
+      - to_node_index
+    row_relationship: complete_directed_nodes_cross_product
+    fields:
+      - {name: from_node_index, type: int32, nullable: false, foreign_key: nodes.node_index}
+      - {name: to_node_index, type: int32, nullable: false, foreign_key: nodes.node_index}
+      - {name: travel_time_ms, type: int64, nullable: false, minimum: 0}
+      - {name: distance_mm, type: int64, nullable: true, minimum: 0}
+writer_profile:
+  parquet_compatibility_version: "1.0"
+  data_page_version: "1.0"
+  compression: zstd
+  compression_level: 3
+  dictionary_encoding: true
+  statistics: true
+  deprecated_int96_timestamps: false
+  store_arrow_schema: true
+  compliant_nested_types: true
+  maximum_rows_per_row_group: 1048576

@@ -1,0 +1,27 @@
+format_version: 1.0.0-draft.1
+instance_id: synthetic.smoke.reveal-original.fleet-one
+physical_problem_id: synthetic.smoke.fleet-one
+physical_problem_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+problem_family: darp
+tier: exact_classical
+collection_id: benchmark-synthetic-v0.1
+components:
+  requests: synthetic.smoke.requests
+  reveal_times: synthetic.smoke.reveal-original
+  vehicles: synthetic.smoke.fleet-one
+  nodes: synthetic.smoke.nodes
+  travel_times: synthetic.smoke.travel-times
+time:
+  semantics: relative_elapsed
+  unit: millisecond
+  service_horizon_ms: 3600000
+  source_time_origin: null
+spatial:
+  profile: matrix_only
+  coordinate_unit: null
+relocation:
+  allowed: true
+  destinations: nodes.relocation_allowed
+extensions: []
+notes: Draft composition example; referenced Parquet fixtures are not included yet.
+

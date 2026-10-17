@@ -1,0 +1,73 @@
+schema_version: 0.1.0
+format_version: 1.0.0-draft.1
+status: prerelease
+storage_policy: ../DATA_STORAGE.md
+release:
+  tag: parquet-data-v1.0.0-draft.1
+  url: https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/tag/parquet-data-v1.0.0-draft.1
+  target_commit: 2c1633f9e8cae88af3ef25e00c60cfc2514dd576
+  canonical_archive_status: pending_zenodo_record
+collections:
+  - collection_id: eccel-ddarp-v1.2
+    collection_version: 1.0.0-draft.1
+    source_release: v1.2
+    license: MIT
+    instance_count: 68
+    artifact_count: 340
+    validation: passed
+    archive:
+      filename: eccel-ddarp-v1.2.parquet-draft.1.tar.gz
+      byte_size: 1158386
+      sha256: 69aafcc4ac5969b385ecfa611d2a5ed9664b60d8881a05aa4ea293f151cfd4a6
+      mirror_url: https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/download/parquet-data-v1.0.0-draft.1/eccel-ddarp-v1.2.parquet-draft.1.tar.gz
+      canonical_url: null
+  - collection_id: nyc-darp-v1.0
+    collection_version: 1.0.0-draft.2
+    supersedes_collection_version: 1.0.0-draft.1
+    source_release: v1.0
+    license: CC-BY-4.0
+    demand_window_count: 96
+    fleet_deployment_count: 62
+    instance_count: 2976
+    artifact_count: 277
+    excluded_nonpositive_party_size_records: 23
+    validation: passed
+    release:
+      tag: parquet-data-v1.0.0-draft.2
+      url: https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/tag/parquet-data-v1.0.0-draft.2
+      target_commit: d71527f9f79f1b79209ecdc925d01f7b8b66dec6
+    archive:
+      filename: nyc-darp-v1.0.parquet-draft.2.tar.gz
+      byte_size: 150099496
+      sha256: 7288210715de03b094293beee9faceb1d4c8838d0605503439d5354daeb1c51e
+      mirror_url: https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/download/parquet-data-v1.0.0-draft.2/nyc-darp-v1.0.parquet-draft.2.tar.gz
+      canonical_url: null
+  - collection_id: ontra-manhattan-tlc-2025-01-22-v1
+    collection_version: 1.0.0-draft.2
+    supersedes_collection_version: 1.0.0-draft.1
+    source_release: v1.0.0
+    license: CC-BY-4.0 AND ODbL-1.0
+    request_count: 24325
+    node_count: 2750
+    travel_matrix_row_count: 7562500
+    fleet_deployment_count: 4
+    official_fleet_deployment_count: 3
+    supplemental_fleet_deployment_count: 1
+    instance_count: 4
+    artifact_count: 8
+    validation: passed
+    release:
+      tag: ontra-manhattan-tlc-2025-01-22-v1.0.0-draft.2
+      url: https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/tag/ontra-manhattan-tlc-2025-01-22-v1.0.0-draft.2
+      target_commit: d71527f9f79f1b79209ecdc925d01f7b8b66dec6
+    archive:
+      filename: ontra-manhattan-tlc-2025-01-22-v1.parquet-draft.2.tar.gz
+      byte_size: 44826971
+      sha256: a0cfdc4307b5f9acd788bf5fbefe9a165c5cda7e4647c90a21e8e93f984c7723
+      mirror_url: https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/download/ontra-manhattan-tlc-2025-01-22-v1.0.0-draft.2/ontra-manhattan-tlc-2025-01-22-v1.parquet-draft.2.tar.gz
+      canonical_url: null
+    source_archive:
+      filename: ontra-manhattan-tlc-2025-01-22-v1.source-v1.0.0.tar.gz
+      byte_size: 149162468
+      sha256: 064c9798853394782e1f3036f115b0323c3227b76affc1793946b29182a8e16a
+      mirror_url: https://github.com/mobility-solutions-inc/online-darp-benchmark/releases/download/ontra-manhattan-tlc-2025-01-22-v1.0.0-draft.1/ontra-manhattan-tlc-2025-01-22-v1.source-v1.0.0.tar.gz

@@ -2,7 +2,7 @@
 schema_version: 0.1.0
 instance_id: <source.release.instance-id>
 title: <human-readable title>
-problem_family: <darp-or-dpdptw>
+problem_family: darp
 tier: <exact_classical-exact_realistic-bounded_medium-or-large_online>
 source:
   source_id: <registered-source-id>
@@ -50,4 +50,3 @@ license:
   redistribution_confirmed: true
   notice_path: <path-to-local-notice>
 notes: null
-

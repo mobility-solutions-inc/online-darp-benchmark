@@ -26,6 +26,7 @@ def _write_collection(
     travel_time_rows: int | None = None,
     distance_mm: int | None = None,
     onboard_requests: list[dict[str, object]] | None = None,
+    reveal_rows: int | None = None,
 ) -> None:
     collection_id = "test-collection"
     artifacts = {}
@@ -96,6 +97,8 @@ def _write_collection(
         tables["travel_times"][1]["distance_mm"] = distance_mm
     if onboard_requests is not None:
         tables["onboard_requests"] = onboard_requests
+    if reveal_rows is not None:
+        tables["reveal_times"] = tables["reveal_times"][:reveal_rows]
     for role, rows in tables.items():
         artifact_id = f"test.{role}"
         path = tmp_path / "tables" / f"{role}.parquet"
@@ -237,11 +240,8 @@ def test_validator_rejects_negative_travel_distance(tmp_path: Path) -> None:
         validate_collection(tmp_path)
 
 
-@pytest.mark.parametrize("assigned_vehicle_index", [-1, 1])
-def test_validator_reports_invalid_onboard_vehicle_without_crashing(
-    tmp_path: Path, assigned_vehicle_index: int
-) -> None:
-    onboard = {
+def _onboard_request(**overrides: object) -> dict[str, object]:
+    row: dict[str, object] = {
         "onboard_request_index": 0,
         "onboard_request_id": "onboard-1",
         "source_request_id": None,
@@ -251,14 +251,63 @@ def test_validator_reports_invalid_onboard_vehicle_without_crashing(
         "earliest_pickup_time_ms": 0,
         "pickup_time_ms": 0,
         "pickup_departure_time_ms": 0,
-        "assigned_vehicle_index": assigned_vehicle_index,
+        "assigned_vehicle_index": 0,
         "dropoff_route_position": 1,
         "max_ride_time_ms": None,
         "dropoff_service_time_ms": 0,
     }
+    row.update(overrides)
+    return row
+
+
+@pytest.mark.parametrize("assigned_vehicle_index", [-1, 1])
+def test_validator_reports_invalid_onboard_vehicle_without_crashing(
+    tmp_path: Path, assigned_vehicle_index: int
+) -> None:
     _write_collection(
-        tmp_path, vehicle_overrides={"initial_load": 1}, onboard_requests=[onboard]
+        tmp_path,
+        vehicle_overrides={"initial_load": 1},
+        onboard_requests=[_onboard_request(assigned_vehicle_index=assigned_vehicle_index)],
     )
     with pytest.raises(CollectionValidationError, match="vehicle foreign key") as error:
         validate_collection(tmp_path)
     assert "onboard loads do not match" not in str(error.value)
+
+
+@pytest.mark.parametrize(
+    ("onboard_overrides", "expected_error"),
+    [
+        ({"dropoff_service_time_ms": -1}, "negative service time"),
+        ({"max_ride_time_ms": 0}, "nonpositive maximum ride time"),
+    ],
+)
+def test_validator_rejects_invalid_onboard_durations(
+    tmp_path: Path, onboard_overrides: dict[str, int], expected_error: str
+) -> None:
+    _write_collection(
+        tmp_path,
+        vehicle_overrides={"initial_load": 1},
+        onboard_requests=[_onboard_request(**onboard_overrides)],
+    )
+    with pytest.raises(CollectionValidationError, match=expected_error):
+        validate_collection(tmp_path)
+
+
+def test_validator_rejects_request_larger_than_every_vehicle(tmp_path: Path) -> None:
+    _write_collection(tmp_path, request_overrides={"party_size": 5})
+    with pytest.raises(CollectionValidationError, match="exceeds every vehicle capacity"):
+        validate_collection(tmp_path)
+
+
+def test_validator_reports_missing_reveal_rows_without_crashing(tmp_path: Path) -> None:
+    _write_collection(tmp_path, reveal_rows=0)
+    with pytest.raises(CollectionValidationError, match="reveal rows do not match"):
+        validate_collection(tmp_path)
+
+
+def test_validator_reports_unreadable_parquet_without_crashing(tmp_path: Path) -> None:
+    _write_collection(tmp_path)
+    path = tmp_path / "tables" / "requests.parquet"
+    path.write_bytes(path.read_bytes()[: path.stat().st_size // 2])
+    with pytest.raises(CollectionValidationError, match="unreadable Parquet artifact"):
+        validate_collection(tmp_path)

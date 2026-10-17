@@ -454,7 +454,12 @@ def _artifact_table(
             errors.append(f"byte size mismatch: {file_record['path']}")
         if sha256_file(path) != file_record["sha256"]:
             errors.append(f"SHA-256 mismatch: {file_record['path']}")
-        parquet_file = pq.ParquetFile(path)
+        try:
+            parquet_file = pq.ParquetFile(path)
+            table = parquet_file.read()
+        except (OSError, pa.ArrowException) as error:
+            errors.append(f"unreadable Parquet artifact: {file_record['path']}: {error}")
+            continue
         metadata = parquet_file.schema_arrow.metadata or {}
         required_metadata = {
             b"online_darp.format_version": FORMAT_VERSION.encode(),
@@ -471,7 +476,6 @@ def _artifact_table(
                 f"{message}: {file_record['path']}"
                 for message in _geo_metadata_errors(metadata)
             )
-        table = parquet_file.read()
         if table.num_rows != file_record["row_count"]:
             errors.append(f"row count mismatch: {file_record['path']}")
         expected_schema = _schema_for(
@@ -583,9 +587,12 @@ def validate_collection(root: Path) -> dict[str, Any]:
             checked_relationships.add(demand_reveal_key)
             if requests["request_index"] != reveals["request_index"]:
                 errors.append(f"{relative_manifest}: reveal rows do not match requests")
-            for row, latest in enumerate(requests["latest_pickup_time_ms"]):
-                if latest is not None and reveals["base_reveal_time_ms"][row] > latest:
-                    warnings.append(f"{request_id}: request {row} reveals after pickup window")
+            else:
+                for row, latest in enumerate(requests["latest_pickup_time_ms"]):
+                    if latest is not None and reveals["base_reveal_time_ms"][row] > latest:
+                        warnings.append(
+                            f"{request_id}: request {row} reveals after pickup window"
+                        )
 
         fleet_id = components["vehicles"]
         fleet_semantics_key = ("fleet-semantics", fleet_id)
@@ -616,6 +623,15 @@ def validate_collection(root: Path) -> dict[str, Any]:
                 for duration in vehicles["max_route_duration_ms"]
             ):
                 errors.append(f"{fleet_id}: nonpositive maximum route duration")
+
+        capacity_key = ("request-capacity", request_id, fleet_id)
+        if capacity_key not in checked_relationships and vehicles["seat_capacity"]:
+            checked_relationships.add(capacity_key)
+            largest_vehicle = max(vehicles["seat_capacity"])
+            if any(value > largest_vehicle for value in requests["party_size"]):
+                errors.append(
+                    f"{relative_manifest}: request party_size exceeds every vehicle capacity"
+                )
 
         matrix_key = ("matrix", components["nodes"], components["travel_times"])
         if matrix_key not in checked_relationships:
@@ -683,6 +699,12 @@ def validate_collection(root: Path) -> dict[str, Any]:
                     errors.append(f"{onboard_id}: party_size below one")
                 if any(value < 1 for value in onboard["dropoff_route_position"]):
                     errors.append(f"{onboard_id}: route position below one")
+                if any(value < 0 for value in onboard["dropoff_service_time_ms"]):
+                    errors.append(f"{onboard_id}: negative service time")
+                if any(
+                    value is not None and value < 1 for value in onboard["max_ride_time_ms"]
+                ):
+                    errors.append(f"{onboard_id}: nonpositive maximum ride time")
                 if any(
                     value < 0 or value >= node_count
                     for value in onboard["pickup_node_index"] + onboard["dropoff_node_index"]

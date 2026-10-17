@@ -36,5 +36,8 @@ Repository = "https://github.com/mobility-solutions-inc/online-darp-benchmark"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+online_darp_benchmark = ["data/*.json"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

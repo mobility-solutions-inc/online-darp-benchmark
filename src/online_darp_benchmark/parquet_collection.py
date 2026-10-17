@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import math
+import re
 import shutil
 import struct
 import sys
@@ -21,6 +22,7 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
 import yaml
+from jsonschema import Draft7Validator
 
 
 FORMAT_VERSION = "1.0.0-draft.1"
@@ -432,6 +434,57 @@ def _package_path(root: Path, relative_path: str) -> Path | None:
     return path if path.is_relative_to(root.resolve()) else None
 
 
+EXTENSION_COLUMN_PATTERN = re.compile(r"x_[a-z0-9]+(?:_[a-z0-9]+)*__[a-z0-9]+(?:_[a-z0-9]+)*")
+
+
+def _projjson_validator() -> Draft7Validator:
+    """Validator for the vendored PROJJSON v0.7 schema (MIT, PROJ contributors)."""
+
+    schema_path = Path(__file__).with_name("data") / "projjson-0.7.schema.json"
+    return Draft7Validator(json.loads(schema_path.read_text(encoding="utf-8")))
+
+
+_PROJJSON_VALIDATOR = _projjson_validator()
+
+
+def _extension_errors(
+    schema: pa.Schema, core_names: Sequence[str], declared: Any
+) -> list[str]:
+    """Check extra columns against the artifact's declared extension columns."""
+
+    if not isinstance(declared, list) or not all(
+        isinstance(column, Mapping) for column in declared
+    ):
+        return ["extension_columns must be a list of mappings"]
+    declarations = {column.get("name"): column for column in declared}
+    errors = []
+    for name, column in declarations.items():
+        if not isinstance(name, str) or not EXTENSION_COLUMN_PATTERN.fullmatch(name):
+            errors.append(f"extension column {name!r} must match x_<organization>__<column>")
+            continue
+        missing = [
+            key
+            for key in ("arrow_type", "nullable", "unit", "semantics", "owner")
+            if key not in column
+        ]
+        if missing:
+            errors.append(f"extension column {name} missing {', '.join(missing)}")
+        if name not in schema.names:
+            errors.append(f"declared extension column {name} is absent")
+            continue
+        field = schema.field(name)
+        if str(field.type) != column.get("arrow_type"):
+            errors.append(
+                f"extension column {name} type {field.type} is not {column.get('arrow_type')}"
+            )
+        if column.get("nullable") is False and field.nullable:
+            errors.append(f"extension column {name} must be non-nullable")
+    for name in schema.names:
+        if name not in core_names and name not in declarations:
+            errors.append(f"undeclared column {name}")
+    return errors
+
+
 def _geo_metadata_errors(metadata: Mapping[bytes, bytes]) -> list[str]:
     try:
         geo = json.loads(metadata[b"geo"])
@@ -443,7 +496,8 @@ def _geo_metadata_errors(metadata: Mapping[bytes, bytes]) -> list[str]:
         errors.append("GeoParquet metadata must be version 1.1.0 with WKB encoding")
     if geo.get("primary_column") != "geometry" or column.get("geometry_types") != ["Point"]:
         errors.append("GeoParquet primary column must be a Point `geometry` column")
-    if not isinstance(column.get("crs"), dict):
+    crs = column.get("crs")
+    if not isinstance(crs, dict) or any(True for _ in _PROJJSON_VALIDATOR.iter_errors(crs)):
         errors.append("GeoParquet crs must be an explicit PROJJSON object")
     return errors
 
@@ -520,12 +574,19 @@ def _instance_errors(instance: Any, collection_id: Any) -> list[str]:
             errors.append(f"missing components {', '.join(missing)}")
         if unknown := sorted(set(components) - REQUIRED_INSTANCE_ROLES - {"onboard_requests"}):
             errors.append(f"unknown components {', '.join(unknown)}")
-    horizon = (instance.get("time") or {}).get("service_horizon_ms")
+    sections = {}
+    for key in ("time", "spatial", "relocation"):
+        section = instance.get(key)
+        if not isinstance(section, Mapping):
+            errors.append(f"{key} must be a mapping")
+            section = {}
+        sections[key] = section
+    horizon = sections["time"].get("service_horizon_ms")
     if not isinstance(horizon, int) or isinstance(horizon, bool) or horizon < 0:
         errors.append("time.service_horizon_ms must be a nonnegative integer")
-    if not isinstance((instance.get("spatial") or {}).get("profile"), str):
+    if not isinstance(sections["spatial"].get("profile"), str):
         errors.append("spatial.profile must be declared")
-    if not isinstance((instance.get("relocation") or {}).get("allowed"), bool):
+    if not isinstance(sections["relocation"].get("allowed"), bool):
         errors.append("relocation.allowed must be a boolean")
     return errors
 
@@ -677,8 +738,16 @@ def _artifact_table(
         expected_schema = _schema_for(
             artifact["schema_name"], artifact.get("spatial_profile")
         ).remove_metadata()
-        if not table.schema.remove_metadata().equals(expected_schema, check_metadata=False):
+        core_names = expected_schema.names
+        if not set(core_names) <= set(table.column_names) or not table.select(
+            core_names
+        ).schema.remove_metadata().equals(expected_schema, check_metadata=False):
             errors.append(f"schema mismatch: {locator}")
+            continue
+        if extension_errors := _extension_errors(
+            table.schema, core_names, artifact.get("extension_columns", [])
+        ):
+            errors.extend(f"{message}: {locator}" for message in extension_errors)
             continue
         for name in table.column_names:
             column = table.column(name)
@@ -1185,11 +1254,20 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
                         and arrival > onboard["pickup_departure_time_ms"][row] + max_ride
                     ):
                         expired += 1
-                    finish = arrival + onboard["dropoff_service_time_ms"][row]
+                    remaining_work = (
+                        arrival
+                        - vehicles["shift_start_time_ms"][vehicle]
+                        + onboard["dropoff_service_time_ms"][row]
+                    )
                     end_node = vehicles["end_node_index"][vehicle]
                     if end_node is not None:
-                        finish += travel["travel_time_ms"][dropoff * node_count + end_node]
-                    if finish > vehicles["shift_end_time_ms"][vehicle]:
+                        remaining_work += travel["travel_time_ms"][
+                            dropoff * node_count + end_node
+                        ]
+                    max_duration = vehicles["max_route_duration_ms"][vehicle]
+                    if remaining_work + vehicles["shift_start_time_ms"][vehicle] > vehicles[
+                        "shift_end_time_ms"
+                    ][vehicle] or (max_duration is not None and remaining_work > max_duration):
                         unreachable += 1
                 if expired:
                     errors.append(
@@ -1199,7 +1277,7 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
                 if unreachable:
                     errors.append(
                         f"{onboard_id}: {unreachable} onboard rider(s) cannot be dropped "
-                        "off within the assigned vehicle's shift"
+                        "off within the assigned vehicle's shift and route duration"
                     )
         elif any(vehicles["initial_load"]):
             errors.append(f"{relative_manifest}: fleet has load but no onboard_requests component")

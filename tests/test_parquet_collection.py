@@ -270,6 +270,12 @@ def test_geographic_metadata_requires_projjson_crs() -> None:
     assert _geo_metadata_errors(metadata("OGC:CRS84")) == [
         "GeoParquet crs must be an explicit PROJJSON object"
     ]
+    assert _geo_metadata_errors(metadata({})) == [
+        "GeoParquet crs must be an explicit PROJJSON object"
+    ]
+    assert _geo_metadata_errors(metadata({"type": "GeographicCRS"})) == [
+        "GeoParquet crs must be an explicit PROJJSON object"
+    ]
     assert _geo_metadata_errors({}) == ["missing or malformed GeoParquet metadata"]
 
 
@@ -696,3 +702,89 @@ def test_validator_accepts_reachable_onboard_deadline(tmp_path: Path) -> None:
         onboard_requests=[_onboard_request(max_ride_time_ms=60_000)],
     )
     assert validate_collection(tmp_path)["valid"] is True
+
+
+@pytest.mark.parametrize("section", ["time", "spatial", "relocation"])
+def test_validator_reports_scalar_instance_sections(tmp_path: Path, section: str) -> None:
+    _write_collection(tmp_path)
+    instance = yaml.safe_load((tmp_path / "instances/test.yaml").read_text())
+    instance[section] = "invalid"
+    dump_yaml(tmp_path / "instances/test.yaml", instance)
+    with pytest.raises(CollectionValidationError, match=f"{section} must be a mapping"):
+        validate_collection(tmp_path)
+
+
+def _add_extension_column(root: Path, name: str, declaration: dict[str, object] | None) -> None:
+    import pyarrow as pa
+
+    collection = yaml.safe_load((root / "collection.yaml").read_text())
+    artifact = collection["artifacts"]["test.requests"]
+    file_record = artifact["files"][0]
+    path = root / file_record["path"]
+    table = pq.read_table(path)
+    table = table.append_column(pa.field(name, pa.string()), pa.array(["note"]))
+    pq.write_table(table, path)
+    file_record["sha256"] = sha256_file(path)
+    file_record["byte_size"] = path.stat().st_size
+    if declaration is not None:
+        artifact["extension_columns"] = [{"name": name, **declaration}]
+    dump_yaml(root / "collection.yaml", collection)
+    instance = yaml.safe_load((root / "instances/test.yaml").read_text())
+    instance["physical_problem_sha256"] = physical_problem_sha256(
+        instance["components"],
+        collection["artifacts"],
+        service_horizon_ms=instance["time"]["service_horizon_ms"],
+        relocation_allowed=instance["relocation"]["allowed"],
+    )
+    dump_yaml(root / "instances/test.yaml", instance)
+
+
+EXTENSION_DECLARATION = {
+    "arrow_type": "string",
+    "nullable": True,
+    "unit": None,
+    "semantics": "Free-text dispatcher note.",
+    "owner": "ontra",
+}
+
+
+def test_validator_accepts_declared_extension_columns(tmp_path: Path) -> None:
+    _write_collection(tmp_path)
+    _add_extension_column(tmp_path, "x_ontra__dispatch_note", EXTENSION_DECLARATION)
+    assert validate_collection(tmp_path)["valid"] is True
+
+
+@pytest.mark.parametrize(
+    ("name", "declaration", "expected_error"),
+    [
+        ("x_ontra__dispatch_note", None, "undeclared column x_ontra__dispatch_note"),
+        ("dispatch_note", EXTENSION_DECLARATION, "must match x_<organization>__<column>"),
+        (
+            "x_ontra__dispatch_note",
+            {**EXTENSION_DECLARATION, "arrow_type": "int64"},
+            "type string is not int64",
+        ),
+        (
+            "x_ontra__dispatch_note",
+            {key: value for key, value in EXTENSION_DECLARATION.items() if key != "owner"},
+            "missing owner",
+        ),
+    ],
+)
+def test_validator_rejects_invalid_extension_columns(
+    tmp_path: Path, name: str, declaration: dict[str, object] | None, expected_error: str
+) -> None:
+    _write_collection(tmp_path)
+    _add_extension_column(tmp_path, name, declaration)
+    with pytest.raises(CollectionValidationError, match=expected_error):
+        validate_collection(tmp_path)
+
+
+def test_validator_applies_route_duration_to_onboard_riders(tmp_path: Path) -> None:
+    _write_collection(
+        tmp_path,
+        vehicle_overrides={"initial_load": 1, "max_route_duration_ms": 20_000},
+        onboard_requests=[_onboard_request()],
+    )
+    with pytest.raises(CollectionValidationError, match="shift and route duration"):
+        validate_collection(tmp_path)

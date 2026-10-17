@@ -389,7 +389,9 @@ x_<organization>__<column_name>
 ```
 
 Its Arrow type, nullability, unit, semantics, and owner are declared in the
-collection manifest. Core readers may preserve and ignore it. An extension MUST
+collection manifest, in the owning artifact's `extension_columns` list as
+`name`, `arrow_type` (Arrow type string such as `int64`), `nullable`, `unit`,
+`semantics`, and `owner`. Core readers may preserve and ignore it. An extension MUST
 NOT change core feasibility or official core metrics unless a benchmark variant
 registers it through governance. Opaque JSON “attributes” columns are discouraged;
 typed columns or separate typed tables are preferred.

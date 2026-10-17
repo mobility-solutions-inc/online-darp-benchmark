@@ -106,6 +106,14 @@ the fleet generated for the full hour. Three official balanced deployments are
 generated at 1,000, 2,000, and 4,000 vehicles. The benchmark preserves the caveat
 instead of silently rewriting the historical artifact.
 
+## PROJJSON schema
+
+`src/online_darp_benchmark/data/projjson-0.7.schema.json` is the unmodified
+PROJJSON v0.7 JSON Schema from <https://proj.org/schemas/v0.7/projjson.schema.json>
+(SHA-256 `67f090556bae996522edad482597c0f9e1b919ca4c9288ac9f8f7cd4180f49b6`),
+copyright Even Rouault and PROJ contributors, 2019–2023, under the MIT license.
+The collection validator uses it to check GeoParquet CRS metadata.
+
 ## Reference implementations and values
 
 The design also consults the open-source DARP implementation and compiled

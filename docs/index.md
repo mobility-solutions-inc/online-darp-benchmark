@@ -48,7 +48,7 @@ immutable archives, not committed to Git or Git LFS.
 
 - [Read the full benchmark contract on GitHub](https://github.com/mobility-solutions-inc/online-darp-benchmark/blob/main/BENCHMARK_CARD.md)
 - [Read the data storage and download policy](data.html)
-- [Submit a public instance or benchmark result](submit.html)
+- [Submit a public or hidden instance, or a benchmark result](submit.html)
 - [Browse the schemas](https://github.com/mobility-solutions-inc/online-darp-benchmark/tree/main/schemas)
 - [Review RFC-0001: Parquet instance packages](https://github.com/mobility-solutions-inc/online-darp-benchmark/blob/proposal/parquet-instance-format/proposals/0001-parquet-instance-format.md)
 - [Follow the roadmap](https://github.com/mobility-solutions-inc/online-darp-benchmark/blob/main/ROADMAP.md)

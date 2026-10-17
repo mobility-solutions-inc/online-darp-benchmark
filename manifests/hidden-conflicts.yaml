@@ -1,0 +1,28 @@
+# Public standing conflicts that affect hidden-result eligibility. This is not
+# the confidential per-instance access ledger.
+schema_version: 0.1.0
+policy_version: 0.1.0-draft.1
+entries:
+  - conflict_id: connor-riley-hidden-suite-access
+    person: Connor Riley
+    github: ctriley
+    affiliation: Ontra Mobility / Mobility Solutions Inc
+    access_scope: All hidden instances and hidden-evaluation infrastructure administered by the project.
+    access_basis: Founding maintainer and hidden-suite administrator.
+    standing_since: "2026-08-27"
+    restriction:
+      applies_to: Code authored or controlled by Connor Riley.
+      official_hidden_result_eligible: false
+      disqualifying_algorithm_team_roles:
+        - author
+        - controller
+        - tuner
+        - configurator
+      allowed_hidden_classifications:
+        - contributor_reference
+        - unofficial
+      permanence: Prior access cannot be undone by deletion, recusal, or a different evaluation operator.
+    statement: >-
+      Connor Riley will not submit or claim official hidden-instance benchmark
+      results for code he authors or controls. Another person operating the run
+      does not change its eligibility.

@@ -1,4 +1,4 @@
-"""Validate Online DARP instance, result, and event-log records."""
+"""Validate Online DARP instance, result, hidden-intake, and event records."""
 
 from __future__ import annotations
 
@@ -54,20 +54,82 @@ def _format_error(error: Any, prefix: str = "") -> str:
     return f"{where}: {error.message}"
 
 
+def _validate_hidden_result_conflicts(
+    document: dict[str, Any], schema_dir: Path
+) -> None:
+    """Fail closed when an official hidden result has a standing team conflict."""
+
+    standing = document.get("standing", {})
+    if not (
+        standing.get("instance_visibility") == "hidden"
+        and standing.get("classification") == "official"
+    ):
+        return
+
+    registry_path = schema_dir.parent / "manifests" / "hidden-conflicts.yaml"
+    try:
+        registry = load_document(registry_path)
+    except FileNotFoundError as error:
+        raise ValidationFailure(
+            "official hidden-result validation requires the standing conflict "
+            f"registry: {registry_path}"
+        ) from error
+
+    team_by_github = {
+        member["github"].lower(): member
+        for member in document["algorithm"]["team"]
+        if member.get("github")
+    }
+    conflicts: list[str] = []
+    for entry in registry.get("entries", []):
+        restriction = entry.get("restriction", {})
+        github = entry.get("github")
+        if (
+            restriction.get("official_hidden_result_eligible") is False
+            and isinstance(github, str)
+            and github.lower() in team_by_github
+        ):
+            member = team_by_github[github.lower()]
+            restricted_roles = set(
+                restriction.get("disqualifying_algorithm_team_roles", [])
+            )
+            matched_roles = sorted(restricted_roles.intersection(member["roles"]))
+            if matched_roles:
+                conflicts.append(
+                    f"{entry['person']} (@{github}) has standing hidden-suite "
+                    f"access and algorithm-team role(s): {', '.join(matched_roles)}"
+                )
+
+    if conflicts:
+        raise ValidationFailure(
+            "official hidden result is ineligible due to standing conflicts:\n"
+            + "\n".join(conflicts)
+        )
+
+
 def validate_manifest(
     path: Path, kind: str, schema_dir: Path | None = None
 ) -> dict[str, Any]:
-    """Validate an instance or result manifest and return the parsed document."""
+    """Validate an instance, hidden-intake, or result manifest."""
 
-    if kind not in {"instance", "result"}:
+    if kind not in {
+        "instance",
+        "hidden-instance",
+        "hidden-access-ledger",
+        "hidden-suite-registry",
+        "result",
+    }:
         raise ValueError(f"unsupported manifest kind: {kind}")
     document = load_document(path)
-    schema = load_schema(kind, schema_dir)
+    resolved_schema_dir = schema_dir or default_schema_dir()
+    schema = load_schema(kind, resolved_schema_dir)
     validator = Draft202012Validator(schema, format_checker=FormatChecker())
     errors = sorted(validator.iter_errors(document), key=lambda item: list(item.path))
     if errors:
         details = "\n".join(_format_error(error) for error in errors)
         raise ValidationFailure(f"{path} failed {kind} validation:\n{details}")
+    if kind == "result":
+        _validate_hidden_result_conflicts(document, resolved_schema_dir)
     return document
 
 
@@ -129,7 +191,17 @@ def build_parser() -> argparse.ArgumentParser:
         prog="odb-validate",
         description="Validate Online DARP Benchmark artifacts.",
     )
-    parser.add_argument("kind", choices=("instance", "result", "events"))
+    parser.add_argument(
+        "kind",
+        choices=(
+            "instance",
+            "hidden-instance",
+            "hidden-access-ledger",
+            "hidden-suite-registry",
+            "result",
+            "events",
+        ),
+    )
     parser.add_argument("path", type=Path)
     parser.add_argument(
         "--schema-dir",
@@ -156,4 +228,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

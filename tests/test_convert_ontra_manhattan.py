@@ -129,7 +129,7 @@ def test_convert_ontra_manhattan_round_trip(tmp_path: Path) -> None:
         summary = convert(
             source,
             output,
-            "test-version",
+            "1.0.0",
             graphhopper_url=f"http://127.0.0.1:{server.server_port}",
             osm_pbf_sha256="0" * 64,
             graphhopper_build="test-build",
@@ -158,7 +158,7 @@ def test_convert_ontra_manhattan_round_trip(tmp_path: Path) -> None:
     collection = yaml.safe_load((output / "collection.yaml").read_text())
     assert collection["scope"]["official_fleet_deployments"] == 1
     assert collection["scope"]["supplemental_fleet_deployments"] == 1
-    assert collection["transformations"][0]["code_version"] == "test-version"
+    assert collection["transformations"][0]["code_version"] == "1.0.0"
     assert collection["license"]["spdx_or_name"] == "CC-BY-4.0 AND ODbL-1.0"
 
     nodes = pq.read_table(
@@ -192,11 +192,11 @@ def test_convert_ontra_manhattan_round_trip(tmp_path: Path) -> None:
         "expected_resumed_routes",
     ),
     [
-        ("1" * 64, "test-version", None, 0),
-        ("2" * 64, "test-version", None, 20),
-        ("1" * 64, "test-version-2", None, 20),
-        ("1" * 64, "test-version", "truncate", 8),
-        ("1" * 64, "test-version", "replace", 8),
+        ("1" * 64, "1.0.0", None, 0),
+        ("2" * 64, "1.0.0", None, 20),
+        ("1" * 64, "2.0.0", None, 20),
+        ("1" * 64, "1.0.0", "truncate", 8),
+        ("1" * 64, "1.0.0", "replace", 8),
     ],
 )
 def test_interrupted_conversion_reuses_only_matching_routing_shards(
@@ -216,7 +216,7 @@ def test_interrupted_conversion_reuses_only_matching_routing_shards(
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
 
-    def run(graphhopper_config_sha256: str, converter_version: str = "test-version") -> None:
+    def run(graphhopper_config_sha256: str, converter_version: str = "1.0.0") -> None:
         convert(
             source,
             output,
@@ -273,7 +273,7 @@ def test_converter_rejects_nonpositive_matrix_shard_size(tmp_path: Path) -> None
         convert(
             source,
             tmp_path / "collection",
-            "test-version",
+            "1.0.0",
             graphhopper_url="http://127.0.0.1:1",
             osm_pbf_sha256="0" * 64,
             graphhopper_build="test-build",

@@ -38,6 +38,7 @@ def _write_collection(
     notice_paths: list[str] | None = None,
     spatial_profile: str | None = None,
     vehicle_rows: int | None = None,
+    node_count: int = 2,
 ) -> None:
     collection_id = "test-collection"
     artifacts = {}
@@ -77,17 +78,12 @@ def _write_collection(
         ],
         "nodes": [
             {
-                "node_index": 0,
-                "node_id": "node-0",
-                "source_node_id": "0",
+                "node_index": index,
+                "node_id": f"node-{index}",
+                "source_node_id": str(index),
                 "relocation_allowed": True,
-            },
-            {
-                "node_index": 1,
-                "node_id": "node-1",
-                "source_node_id": "1",
-                "relocation_allowed": True,
-            },
+            }
+            for index in range(node_count)
         ],
         "travel_times": [
             {
@@ -96,8 +92,8 @@ def _write_collection(
                 "travel_time_ms": 0 if origin == destination else 30_000,
                 "distance_mm": None,
             }
-            for origin in range(2)
-            for destination in range(2)
+            for origin in range(node_count)
+            for destination in range(node_count)
         ],
     }
     tables["vehicles"][0].update(vehicle_overrides or {})
@@ -1138,4 +1134,67 @@ def test_validator_bounds_all_onboard_dropoffs_per_vehicle(tmp_path: Path) -> No
         ],
     )
     with pytest.raises(CollectionValidationError, match="cannot drop off all onboard riders"):
+        validate_collection(tmp_path)
+
+
+def test_loaded_vehicle_waits_for_onboard_departure_before_leaving(tmp_path: Path) -> None:
+    # A spare seat is available, but the vehicle is loading a rider until 100 s.
+    _write_collection(
+        tmp_path,
+        vehicle_overrides={"initial_load": 1},
+        request_overrides={
+            "pickup_node_index": 1,
+            "dropoff_node_index": 0,
+            "latest_pickup_time_ms": 50_000,
+        },
+        onboard_requests=[
+            _onboard_request(
+                dropoff_node_index=0,
+                earliest_pickup_time_ms=100_000,
+                pickup_time_ms=100_000,
+                pickup_departure_time_ms=100_000,
+            )
+        ],
+    )
+    with pytest.raises(CollectionValidationError, match="within its shift and limits"):
+        validate_collection(tmp_path)
+
+
+def test_onboard_route_bound_includes_travel_between_dropoffs(tmp_path: Path) -> None:
+    # Drop-offs at nodes 1 and 2 each fit alone (60 s), but visiting both takes 90 s.
+    _write_collection(
+        tmp_path,
+        node_count=3,
+        vehicle_overrides={"initial_load": 2, "shift_end_time_ms": 80_000},
+        onboard_requests=[
+            _onboard_request(
+                onboard_request_index=index,
+                onboard_request_id=f"onboard-{index}",
+                dropoff_node_index=index + 1,
+                dropoff_route_position=index + 1,
+            )
+            for index in range(2)
+        ],
+    )
+    with pytest.raises(CollectionValidationError, match="cannot drop off all onboard riders"):
+        validate_collection(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected_error"),
+    [
+        ("path", 3, "one nonempty path or uri"),
+        ("sha256", "XYZ", "64 lowercase hex"),
+        ("byte_size", "12", "byte_size must be a nonnegative integer"),
+        ("row_count", -1, "row_count must be a nonnegative integer"),
+    ],
+)
+def test_validator_type_checks_file_records(
+    tmp_path: Path, field: str, value: object, expected_error: str
+) -> None:
+    _write_collection(tmp_path)
+    collection = yaml.safe_load((tmp_path / "collection.yaml").read_text())
+    collection["artifacts"]["test.requests"]["files"][0][field] = value
+    dump_yaml(tmp_path / "collection.yaml", collection)
+    with pytest.raises(CollectionValidationError, match=expected_error):
         validate_collection(tmp_path)

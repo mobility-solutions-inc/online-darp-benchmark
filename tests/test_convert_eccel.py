@@ -34,7 +34,7 @@ def test_converter_requires_exact_source_instance_set(
     _source_fixture(source, omit=omit, extra=extra)
 
     with pytest.raises(ValueError, match=message):
-        convert(source, output, "test-version")
+        convert(source, output, "1.0.0")
     assert not output.exists()
 
 
@@ -44,7 +44,7 @@ def test_converter_rejects_source_contents_that_differ_from_pin(tmp_path: Path) 
     _source_fixture(source)
 
     with pytest.raises(ValueError, match="do not match the pinned"):
-        convert(source, output, "test-version")
+        convert(source, output, "1.0.0")
     assert not output.exists()
 
 
@@ -54,11 +54,11 @@ def test_converter_requires_source_license(tmp_path: Path) -> None:
     _source_fixture(source)
 
     with pytest.raises(FileNotFoundError, match="license is required"):
-        convert(source, output, "test-version", enforce_pins=False)
+        convert(source, output, "1.0.0", enforce_pins=False)
     assert not output.exists()
 
 
-@pytest.mark.parametrize("version", ["", "unreleased"])
+@pytest.mark.parametrize("version", ["", "unreleased", "main", "a" * 39])
 def test_converter_requires_immutable_version(tmp_path: Path, version: str) -> None:
     with pytest.raises(ValueError, match="immutable commit or release"):
         convert(tmp_path / "source", tmp_path / "collection", version)

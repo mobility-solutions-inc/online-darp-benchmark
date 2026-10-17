@@ -15,5 +15,5 @@ def test_converter_rejects_source_that_differs_from_pin(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="do not match the pinned archive"):
         verify_source(source)
     with pytest.raises(ValueError, match="do not match the pinned archive"):
-        convert(source, tmp_path / "collection", "test-version")
+        convert(source, tmp_path / "collection", "1.0.0")
     assert not (tmp_path / "collection").exists()

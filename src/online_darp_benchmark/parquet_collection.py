@@ -362,15 +362,19 @@ def write_parquet(
     }
 
 
-def require_converter_version(converter_version: str) -> None:
-    """Reject converter versions that cannot identify the producing code."""
+IMMUTABLE_VERSION_PATTERN = re.compile(
+    r"(?:[0-9a-f]{40}|[0-9a-f]{64}|v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)"
+)
 
-    if not converter_version.strip() or converter_version.strip().lower() in {
-        "unreleased",
-        "unknown",
-        "dev",
-    }:
-        raise ValueError("converter_version must be an immutable commit or release identifier")
+
+def require_converter_version(converter_version: str) -> None:
+    """Require a full commit hash or a semantic-version release identifier."""
+
+    if not IMMUTABLE_VERSION_PATTERN.fullmatch(converter_version):
+        raise ValueError(
+            "converter_version must be an immutable commit or release identifier "
+            "(a full commit hash or a semantic version)"
+        )
 
 
 def artifact_record(
@@ -684,6 +688,19 @@ def _manifest_errors(collection: Any) -> list[str]:
             ]
             if missing:
                 errors.append(f"{artifact_id}: file record missing {', '.join(missing)}")
+                continue
+            locators = [file_record.get(key) for key in ("path", "uri") if key in file_record]
+            if len(locators) != 1 or not isinstance(locators[0], str) or not locators[0]:
+                errors.append(f"{artifact_id}: file locator must be one nonempty path or uri")
+            if not (
+                isinstance(file_record["sha256"], str)
+                and re.fullmatch(r"[0-9a-f]{64}", file_record["sha256"])
+            ):
+                errors.append(f"{artifact_id}: file sha256 must be 64 lowercase hex digits")
+            for key in ("byte_size", "row_count"):
+                value = file_record[key]
+                if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                    errors.append(f"{artifact_id}: file {key} must be a nonnegative integer")
     return errors
 
 
@@ -904,8 +921,11 @@ def _seat_release_lower_bound(
     when several parties must be released).
     """
 
+    # Leaving the start node waits for every onboard rider to depart.
+    leave_wait = max(0, max(drop[3] for drop in drops) - departure)
+
     def wait_for(rider_departure: int) -> int:
-        return max(0, rider_departure - departure)
+        return max(leave_wait, rider_departure - departure)
 
     first_leg = min(times[start_node * node_count + node].as_py() for node, *_ in drops)
     last_leg = None
@@ -1022,6 +1042,16 @@ def _requests_outside_fleet_shifts(
         # The start node is the vehicle's location at simulation time zero.
         departure = max(shift_start, 0)
         to_pickup = pc.take(times, pc.add(remaining["pickup"], start_node * node_count))
+        if drops:
+            # A vehicle still loading onboard riders cannot leave its start node
+            # before they depart; a pickup at the start node needs no departure.
+            leave_wait = max(0, max(drop[3] for drop in drops) - departure)
+            if leave_wait:
+                to_pickup = pc.if_else(
+                    pc.equal(remaining["pickup"], start_node),
+                    to_pickup,
+                    pc.add(to_pickup, leave_wait),
+                )
         if load and drops:
             to_pickup = _seat_release_lower_bound(
                 remaining,
@@ -1455,7 +1485,9 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
                     )
                 # dropoff_route_position records the source route, not a required
                 # order, so bound visiting all of a vehicle's drop-offs in any order:
-                # the cheapest first leg, every service, and the cheapest leg home.
+                # each distinct drop-off node is entered by its cheapest arc from the
+                # start or another drop-off, plus every service and the cheapest leg
+                # home. This needs no triangle inequality.
                 riders_by_vehicle: dict[int, list[int]] = {}
                 for row in onboard_rows:
                     riders_by_vehicle.setdefault(
@@ -1466,12 +1498,13 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
                     if len(rows) < 2:
                         continue
                     start_node = vehicles["start_node_index"][vehicle]
-                    work = min(
-                        travel["travel_time_ms"][
-                            start_node * node_count + onboard["dropoff_node_index"][row]
-                        ]
-                        for row in rows
-                    ) + sum(onboard["dropoff_service_time_ms"][row] for row in rows)
+                    drop_nodes = {onboard["dropoff_node_index"][row] for row in rows}
+                    work = sum(onboard["dropoff_service_time_ms"][row] for row in rows)
+                    for node in drop_nodes - {start_node}:
+                        work += min(
+                            travel["travel_time_ms"][origin * node_count + node]
+                            for origin in ({start_node} | drop_nodes) - {node}
+                        )
                     end_node = vehicles["end_node_index"][vehicle]
                     if end_node is not None:
                         work += min(

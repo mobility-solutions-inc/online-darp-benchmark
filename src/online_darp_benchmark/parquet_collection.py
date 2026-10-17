@@ -245,7 +245,7 @@ class CollectionValidationError(ValueError):
     """Raised when a normalized collection violates RFC-0001."""
 
     def __init__(self, report: dict[str, Any]) -> None:
-        super().__init__(yaml.safe_dump(report, sort_keys=False))
+        super().__init__(yaml.safe_dump(report, sort_keys=False, width=float("inf")))
         self.report = report
 
 
@@ -544,6 +544,7 @@ def _artifact_table(
         ).remove_metadata()
         if not table.schema.remove_metadata().equals(expected_schema, check_metadata=False):
             errors.append(f"schema mismatch: {locator}")
+            continue
         for name in table.column_names:
             column = table.column(name)
             if (
@@ -552,7 +553,65 @@ def _artifact_table(
             ):
                 errors.append(f"non-finite {name} values: {locator}")
         tables.append(table)
-    return pa.concat_tables(tables) if tables else None
+    # Semantic checks run only when every file is present, readable, and
+    # schema-valid; the failures above are already reported.
+    if not tables or len(tables) != len(artifact["files"]):
+        return None
+    return pa.concat_tables(tables)
+
+
+def _requests_outside_fleet_shifts(
+    requests: pa.Table, vehicles: pa.Table, travel: pa.Table, node_count: int
+) -> int:
+    """Count requests that no vehicle can serve alone within its shift and capacity.
+
+    This is a necessary condition: it ignores travel to the pickup and to the
+    terminal, so it never rejects a request that some vehicle could serve.
+    """
+
+    pair_index = pc.add(
+        pc.multiply(pc.cast(requests["pickup_node_index"], pa.int64()), node_count),
+        pc.cast(requests["dropoff_node_index"], pa.int64()),
+    )
+    busy = pc.add(
+        pc.add(requests["pickup_service_time_ms"], pc.take(travel["travel_time_ms"], pair_index)),
+        requests["dropoff_service_time_ms"],
+    )
+    remaining = pa.table(
+        {
+            "party_size": requests["party_size"],
+            "earliest": requests["earliest_pickup_time_ms"],
+            "latest": requests["latest_pickup_time_ms"],
+            "busy": busy,
+        }
+    )
+    shifts = set(
+        zip(
+            vehicles["seat_capacity"].to_pylist(),
+            vehicles["shift_start_time_ms"].to_pylist(),
+            vehicles["shift_end_time_ms"].to_pylist(),
+            strict=True,
+        )
+    )
+    # Most permissive shifts first, so later groups only see the few requests left.
+    for capacity, start, end in sorted(shifts, key=lambda shift: (shift[1], -shift[2], -shift[0])):
+        if remaining.num_rows == 0:
+            break
+        served = pc.and_(
+            pc.and_(
+                pc.less_equal(remaining["party_size"], capacity),
+                pc.fill_null(pc.greater_equal(remaining["latest"], start), True),
+            ),
+            pc.less_equal(
+                pc.add(
+                    pc.max_element_wise(remaining["earliest"], pa.scalar(start, pa.int64())),
+                    remaining["busy"],
+                ),
+                end,
+            ),
+        )
+        remaining = remaining.filter(pc.invert(served))
+    return remaining.num_rows
 
 
 def validate_collection(
@@ -597,6 +656,7 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
     }
     checked_artifacts: set[str] = set()
     checked_relationships: set[tuple[str, ...]] = set()
+    physical_fingerprints: dict[Any, str] = {}
 
     for relative_manifest in collection.get("instances", []):
         manifest_path = _package_path(root, relative_manifest)
@@ -731,6 +791,32 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
                 for duration in vehicles["max_route_duration_ms"]
             ):
                 errors.append(f"{fleet_id}: nonpositive maximum route duration")
+
+        shift_key = ("request-shifts", request_id, fleet_id, components["travel_times"])
+        request_nodes = pa.chunked_array(
+            [
+                *cache[request_id]["pickup_node_index"].chunks,
+                *cache[request_id]["dropoff_node_index"].chunks,
+            ],
+            type=pa.int32(),
+        )
+        if (
+            shift_key not in checked_relationships
+            and requests["request_index"]
+            and vehicles["vehicle_index"]
+            and len(travel["travel_time_ms"]) == node_count * node_count
+            and pc.min(request_nodes).as_py() >= 0
+            and pc.max(request_nodes).as_py() < node_count
+        ):
+            checked_relationships.add(shift_key)
+            unserved = _requests_outside_fleet_shifts(
+                cache[request_id], cache[fleet_id], cache[components["travel_times"]], node_count
+            )
+            if unserved:
+                errors.append(
+                    f"{relative_manifest}: {unserved} request(s) cannot be served by any "
+                    "vehicle within its shift and capacity"
+                )
 
         capacity_key = ("request-capacity", request_id, fleet_id)
         if capacity_key not in checked_relationships and vehicles["seat_capacity"]:
@@ -878,6 +964,15 @@ def _validate_collection(root: Path, fetch_uri: Callable[[str], Path]) -> dict[s
         )
         if instance.get("physical_problem_sha256") != expected_fingerprint:
             errors.append(f"{relative_manifest}: physical problem fingerprint mismatch")
+        physical_problem_id = instance.get("physical_problem_id")
+        known_fingerprint = physical_fingerprints.setdefault(
+            physical_problem_id, expected_fingerprint
+        )
+        if known_fingerprint != expected_fingerprint:
+            errors.append(
+                f"{relative_manifest}: physical_problem_id {physical_problem_id!r} "
+                "is reused for a different physical problem"
+            )
 
     report = {
         "collection_id": collection.get("collection_id"),

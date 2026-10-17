@@ -16,6 +16,7 @@ from online_darp_benchmark.parquet_collection import (
     dump_yaml,
     main,
     physical_problem_sha256,
+    sha256_file,
     validate_collection,
     write_parquet,
 )
@@ -451,4 +452,55 @@ def test_validator_rejects_mismatched_spatial_profile(tmp_path: Path) -> None:
 def test_validator_rejects_demand_without_vehicles(tmp_path: Path) -> None:
     _write_collection(tmp_path, vehicle_rows=0)
     with pytest.raises(CollectionValidationError, match="no vehicles to serve them"):
+        validate_collection(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "vehicle_overrides",
+    [
+        {"shift_start_time_ms": 0, "shift_end_time_ms": 20_000},
+        {"shift_start_time_ms": 100_000, "shift_end_time_ms": 300_000},
+    ],
+)
+def test_validator_rejects_requests_outside_every_vehicle_shift(
+    tmp_path: Path, vehicle_overrides: dict[str, int]
+) -> None:
+    _write_collection(tmp_path, vehicle_overrides=vehicle_overrides)
+    with pytest.raises(CollectionValidationError, match="within its shift and capacity"):
+        validate_collection(tmp_path)
+
+
+def test_validator_reports_schema_mismatch_without_crashing(tmp_path: Path) -> None:
+    _write_collection(tmp_path)
+    collection = yaml.safe_load((tmp_path / "collection.yaml").read_text())
+    file_record = collection["artifacts"]["test.requests"]["files"][0]
+    path = tmp_path / file_record["path"]
+    table = pq.read_table(path)
+    pq.write_table(table.drop_columns(["party_size"]), path)
+    file_record["sha256"] = sha256_file(path)
+    file_record["byte_size"] = path.stat().st_size
+    dump_yaml(tmp_path / "collection.yaml", collection)
+
+    with pytest.raises(CollectionValidationError, match="schema mismatch") as error:
+        validate_collection(tmp_path)
+    assert "unresolved component" in str(error.value)
+
+
+def test_validator_rejects_reused_physical_problem_id(tmp_path: Path) -> None:
+    _write_collection(tmp_path)
+    collection = yaml.safe_load((tmp_path / "collection.yaml").read_text())
+    instance = yaml.safe_load((tmp_path / "instances/test.yaml").read_text())
+    instance["instance_id"] = "test-short-horizon"
+    instance["time"]["service_horizon_ms"] = 200_000
+    instance["physical_problem_sha256"] = physical_problem_sha256(
+        instance["components"],
+        collection["artifacts"],
+        service_horizon_ms=200_000,
+        relocation_allowed=True,
+    )
+    dump_yaml(tmp_path / "instances/test-short-horizon.yaml", instance)
+    collection["instances"].append("instances/test-short-horizon.yaml")
+    dump_yaml(tmp_path / "collection.yaml", collection)
+
+    with pytest.raises(CollectionValidationError, match="reused for a different physical"):
         validate_collection(tmp_path)
